@@ -1,0 +1,8077 @@
+<!doctype html>
+<html>
+<head>
+
+<meta charset="utf-8">
+
+<meta name="viewport"
+content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+
+<title>Retro Land - PS5 Safari 17</title>
+
+<style>
+
+html,body{
+margin:0;
+width:100%;
+height:100%;
+overflow:hidden;
+background:#111;
+color:#e5efc8;
+font-family:Arial,sans-serif;
+touch-action:none;
+}
+
+#bar{
+height:50px;
+background:#1c2418;
+display:flex;
+align-items:center;
+justify-content:space-between;
+padding:0 12px;
+box-sizing:border-box;
+gap:8px;
+}
+
+#barLeft{
+display:flex;
+align-items:center;
+gap:10px;
+min-width:0;
+}
+
+#barTitle{
+white-space:nowrap;
+}
+
+#romSelect{
+max-width:230px;
+height:32px;
+background:#293426;
+color:#e5efc8;
+border:1px solid #607052;
+border-radius:6px;
+padding:4px 7px;
+font-weight:bold;
+}
+
+button{
+background:#293426;
+color:#e5efc8;
+border:1px solid #607052;
+border-radius:6px;
+padding:7px 11px;
+font-weight:bold;
+}
+
+#stage{
+height:calc(100% - 80px);
+display:flex;
+align-items:center;
+justify-content:center;
+}
+
+canvas{
+width:min(100%,960px);
+height:auto;
+max-height:100%;
+image-rendering:pixelated;
+image-rendering:crisp-edges;
+background:#cbd99e;
+border:8px solid #20271d;
+box-sizing:border-box;
+}
+
+#hint{
+text-align:center;
+height:30px;
+font-size:12px;
+opacity:.8;
+padding-top:7px;
+box-sizing:border-box;
+}
+
+#gbButtons{
+position:fixed;
+right:28px;
+bottom:35px;
+display:flex;
+align-items:center;
+gap:10px;
+z-index:50;
+touch-action:none;
+-webkit-user-select:none;
+user-select:none;
+}
+
+#startBtn,
+#selectBtn{
+width:75px;
+height:48px;
+border-radius:25px;
+font-size:12px;
+background:#38482f;
+border:2px solid #91a978;
+color:#eef6d5;
+touch-action:none;
+-webkit-user-select:none;
+user-select:none;
+}
+
+#actionButtons{
+display:flex;
+align-items:center;
+gap:10px;
+}
+
+#buttonA,
+#buttonB{
+width:75px;
+height:75px;
+border-radius:50%;
+font-size:18px;
+background:#38482f;
+border:2px solid #91a978;
+color:#eef6d5;
+touch-action:none;
+-webkit-user-select:none;
+user-select:none;
+}
+
+#buttonA:active,
+#buttonB:active,
+#startBtn:active,
+#selectBtn:active{
+transform:scale(.94);
+}
+
+#buttonA:focus,
+#buttonB:focus,
+#startBtn:focus,
+#selectBtn:focus{
+outline:3px solid #dce9b8;
+outline-offset:3px;
+}
+
+</style>
+
+</head>
+
+<body>
+
+<div id="bar">
+
+<div id="barLeft">
+
+<b id="barTitle">
+RETRO LAND — GAME BOY STYLE
+</b>
+
+<select id="romSelect">
+<option value="">Select ROM...</option>
+</select>
+
+<input
+id="romFile"
+type="file"
+accept=".gb"
+style="display:none"
+>
+
+<button
+id="romFileBtn"
+type="button"
+>OPEN ROM</button>
+
+</div>
+
+<span>
+
+<button id="pause">
+PAUSE
+</button>
+
+<button id="reset">
+RESET
+</button>
+
+<button id="sound">
+SOUND
+</button>
+
+<button id="speed">
+SPEED 1X
+</button>
+
+<button id="save">
+SAVE
+</button>
+
+<button id="load">
+LOAD
+</button>   
+
+</span>
+
+</div>
+
+<div id="stage">
+
+<canvas
+id="c"
+width="160"
+height="144"
+tabindex="0"></canvas>
+
+</div>
+
+<div id="hint">
+
+DualSense: D-pad / Left Stick = Move · X = A · O = B · OPTIONS = Pause
+
+</div>
+
+<div id="gbButtons">
+
+<button id="startBtn" type="button">
+START
+</button>
+
+<button id="selectBtn" type="button">
+SELECT
+</button>
+
+<div id="actionButtons">
+
+<button id="buttonB" type="button">
+B
+</button>
+
+<button id="buttonA" type="button">
+A
+</button>
+
+</div>
+
+</div>
+
+<script>
+
+"use strict";
+
+
+/* =========================================================
+   CANVAS
+========================================================= */
+
+const c=document.getElementById("c");
+const x=c.getContext("2d");
+
+const W=160;
+const H=144;
+
+x.imageSmoothingEnabled=false;
+
+const gbCtx=x;
+
+const gbImage=
+gbCtx.createImageData(
+160,
+144
+);
+
+const gbBGColorIndex=
+new Uint8Array(
+160*144
+);
+
+
+/* =========================================================
+   PALETTE
+========================================================= */
+
+const gbPalette=[
+255,
+192,
+96,
+0
+];
+
+const gbShadeTable=
+new Uint8Array(256*4);
+
+for(let p=0;p<256;p++){
+
+for(let col=0;col<4;col++){
+
+gbShadeTable[
+p*4+col
+]=
+gbPalette[
+(p>>(col*2))&3
+];
+
+}
+
+}
+
+
+/* =========================================================
+   INPUT
+========================================================= */
+
+const k={
+l:0,
+r:0,
+j:0,
+d:0
+};
+
+const keyboardInput={
+left:0,
+right:0,
+up:0,
+down:0,
+a:0,
+b:0
+};
+
+const gamepadInput={
+left:0,
+right:0,
+up:0,
+down:0,
+a:0,
+b:0
+};
+
+const virtualInput={
+a:0,
+b:0
+};
+
+let pause=0;
+let win=0;
+let sound=0;
+let last=0;
+let cam=0;
+let opt=0;
+
+/* Emulator speed */
+let speed2x=0;   
+
+/* =========================================================
+   GAME BOY JOYPAD
+========================================================= */
+
+const gbJoypad={
+
+A:0,
+B:0,
+SELECT:0,
+START:0,
+
+UP:0,
+DOWN:0,
+LEFT:0,
+RIGHT:0,
+
+selectButtons:1,
+selectDpad:1
+
+};
+
+
+function gbJoypadRead(){
+
+let value=0xCF;
+
+if(gbJoypad.selectButtons){
+
+value|=0x20;
+
+}
+else{
+
+value&=~0x20;
+
+if(gbJoypad.A)
+value&=~0x01;
+
+if(gbJoypad.B)
+value&=~0x02;
+
+if(gbJoypad.SELECT)
+value&=~0x04;
+
+if(gbJoypad.START)
+value&=~0x08;
+
+}
+
+if(gbJoypad.selectDpad){
+
+value|=0x10;
+
+}
+else{
+
+value&=~0x10;
+
+if(gbJoypad.RIGHT)
+value&=~0x01;
+
+if(gbJoypad.LEFT)
+value&=~0x02;
+
+if(gbJoypad.UP)
+value&=~0x04;
+
+if(gbJoypad.DOWN)
+value&=~0x08;
+
+}
+
+return value&0xFF;
+
+}
+
+
+/* =========================================================
+   PLAYER
+========================================================= */
+
+const p={
+
+x:20,
+y:110,
+w:12,
+h:16,
+
+vx:0,
+vy:0,
+
+g:0,
+face:1,
+
+coins:0,
+lives:3,
+
+_j:0,
+_d:0
+
+};
+
+
+/* =========================================================
+   LEVEL
+========================================================= */
+
+const solids=[
+
+[0,142,500,18],
+[540,142,330,18],
+[910,142,460,18],
+[1450,142,420,18],
+[1940,142,460,18],
+
+[180,116,48,8],
+[300,94,42,8],
+[610,112,50,8],
+[720,84,46,8],
+
+[1010,108,55,8],
+[1110,78,44,8],
+[1260,112,55,8],
+
+[1510,112,44,8],
+[1600,88,48,8],
+[1760,112,46,8],
+
+[2020,108,52,8],
+[2130,80,44,8],
+[2260,108,58,8]
+
+];
+
+
+const coins=[
+
+[195,104],
+[315,82],
+[625,100],
+[735,72],
+[1025,96],
+[1125,66],
+[1275,100],
+[1525,100],
+[1615,76],
+[1775,100],
+[2035,96],
+[2145,68],
+[2275,96],
+[455,125],
+[850,125],
+[1385,125],
+[1875,125]
+
+].map(q=>({
+
+x:q[0],
+y:q[1],
+got:0
+
+}));
+
+
+const foes=[
+
+[390,130,-.35],
+[670,100,.3],
+[1170,130,-.32],
+[1660,130,.34],
+[2190,130,-.35]
+
+].map(q=>({
+
+x:q[0],
+y:q[1],
+w:12,
+h:12,
+v:q[2],
+alive:1
+
+}));
+
+
+const goal={
+x:2350,
+y:112,
+w:18,
+h:30
+};
+
+
+let msg="";
+
+
+/* =========================================================
+   COLLISION
+========================================================= */
+
+function hit(a,b){
+
+return(
+a.x<b[0]+b[2] &&
+a.x+a.w>b[0] &&
+a.y<b[1]+b[3] &&
+a.y+a.h>b[1]
+);
+
+}
+
+
+/* =========================================================
+   SIMPLE UI SOUND
+========================================================= */
+
+function beep(f,t){
+
+if(!sound)
+return;
+
+try{
+
+if(!window.uiAudio){
+
+window.uiAudio=
+new(
+window.AudioContext||
+window.webkitAudioContext
+)();
+
+}
+
+if(
+window.uiAudio.state==="suspended"
+){
+
+window.uiAudio.resume();
+
+}
+
+let o=
+window.uiAudio.createOscillator();
+
+let g=
+window.uiAudio.createGain();
+
+o.frequency.value=f;
+o.type="square";
+
+g.gain.value=.025;
+
+o.connect(g);
+g.connect(window.uiAudio.destination);
+
+o.start();
+
+g.gain.exponentialRampToValueAtTime(
+.0001,
+window.uiAudio.currentTime+t
+);
+
+o.stop(
+window.uiAudio.currentTime+t
+);
+
+}
+catch(e){}
+
+}
+
+
+/* =========================================================
+   RESET GAME
+========================================================= */
+
+function reset(){
+
+p.x=20;
+p.y=110;
+
+p.vx=0;
+p.vy=0;
+
+p.coins=0;
+p.lives=3;
+
+coins.forEach(q=>q.got=0);
+foes.forEach(q=>q.alive=1);
+
+cam=0;
+win=0;
+msg="";
+pause=0;
+
+}
+
+
+/* =========================================================
+   UPDATE GAME
+========================================================= */
+
+function update(dt){
+
+if(pause||win)
+return;
+
+p.vy+=.30*dt;
+
+
+if(k.l){
+
+p.vx-=.42*dt;
+p.face=-1;
+
+}
+
+if(k.r){
+
+p.vx+=.42*dt;
+p.face=1;
+
+}
+
+p.vx*=Math.pow(.80,dt);
+
+p.vx=Math.max(
+-2.3,
+Math.min(2.3,p.vx)
+);
+
+
+if(k.j&&!p._j){
+
+if(p.g){
+
+p.vy=-5.7;
+p.g=0;
+
+beep(620,.06);
+
+}
+
+p._j=1;
+
+}
+
+if(!k.j)
+p._j=0;
+
+
+if(k.d&&!p._d){
+
+p.vx=p.face*3.8;
+
+beep(180,.05);
+
+p._d=1;
+
+}
+
+if(!k.d)
+p._d=0;
+
+
+let nx=p.x+p.vx*dt;
+let ny=p.y+p.vy*dt;
+
+let t={
+x:nx,
+y:p.y,
+w:p.w,
+h:p.h
+};
+
+
+for(const q of solids){
+
+if(hit(t,q)){
+
+if(p.vx>0)
+nx=q[0]-p.w;
+
+else if(p.vx<0)
+nx=q[0]+q[2];
+
+p.vx=0;
+
+}
+
+}
+
+
+p.x=Math.max(
+0,
+Math.min(2388,nx)
+);
+
+
+t={
+x:p.x,
+y:ny,
+w:p.w,
+h:p.h
+};
+
+p.g=0;
+
+
+for(const q of solids){
+
+if(hit(t,q)){
+
+if(
+p.vy>=0 &&
+p.y+p.h<=q[1]+5
+){
+
+ny=q[1]-p.h;
+p.vy=0;
+p.g=1;
+
+}
+else if(
+p.vy<0 &&
+p.y>=q[1]+q[3]-4
+){
+
+ny=q[1]+q[3];
+p.vy=0;
+
+}
+
+}
+
+}
+
+
+p.y=ny;
+
+
+if(p.y>185){
+
+p.lives--;
+
+if(p.lives<1){
+
+msg="GAME OVER - RESET";
+pause=1;
+
+}
+else{
+
+p.x=Math.max(
+20,
+p.x-150
+);
+
+p.y=100;
+p.vx=0;
+p.vy=0;
+
+}
+
+}
+
+
+for(const q of coins){
+
+if(
+!q.got &&
+p.x<q.x+7 &&
+p.x+p.w>q.x &&
+p.y<q.y+7 &&
+p.y+p.h>q.y
+){
+
+q.got=1;
+p.coins++;
+
+beep(880,.05);
+
+}
+
+}
+
+
+for(const e of foes){
+
+if(!e.alive)
+continue;
+
+e.x+=e.v*dt;
+
+if(
+e.x<0 ||
+e.x>2388
+)
+e.v*=-1;
+
+
+let z=
+p.x<e.x+12 &&
+p.x+p.w>e.x &&
+p.y<e.y+12 &&
+p.y+p.h>e.y;
+
+
+if(z){
+
+if(
+p.vy>0 &&
+p.y+p.h<e.y+8
+){
+
+e.alive=0;
+p.vy=-3.8;
+
+beep(120,.08);
+
+}
+else{
+
+p.lives--;
+
+p.x=Math.max(
+20,
+p.x-120
+);
+
+p.y=100;
+p.vy=0;
+
+beep(70,.12);
+
+}
+
+}
+
+}
+
+
+if(
+p.x+p.w>goal.x &&
+p.x<goal.x+goal.w &&
+p.y+p.h>goal.y
+){
+
+win=1;
+msg="STAGE CLEAR!";
+
+beep(1000,.18);
+
+}
+
+
+cam=Math.max(
+0,
+Math.min(2080,p.x-105)
+);
+
+}
+
+
+/* =========================================================
+   GAME DRAW
+========================================================= */
+
+function draw(){
+
+x.fillStyle="#cbd99e";
+
+x.fillRect(
+0,
+0,
+W,
+H
+);
+
+x.save();
+
+x.translate(
+-cam,
+0
+);
+
+
+x.fillStyle="#a9bb7b";
+
+for(
+let q=0;
+q<2400;
+q+=80
+){
+
+x.fillRect(
+q,
+40+(q%3)*4,
+24,
+2
+);
+
+x.fillRect(
+q+8,
+36+(q%3)*4,
+6,
+2
+);
+
+}
+
+
+x.fillStyle="#9cad72";
+
+for(
+let q=-40;
+q<2400;
+q+=90
+){
+
+x.beginPath();
+
+x.moveTo(q,142);
+x.lineTo(q+40,96);
+x.lineTo(q+80,142);
+
+x.fill();
+
+}
+
+
+for(const q of solids){
+
+x.fillStyle="#26321f";
+
+x.fillRect(
+q[0],
+q[1],
+q[2],
+q[3]
+);
+
+x.fillStyle="#657653";
+
+x.fillRect(
+q[0],
+q[1],
+q[2],
+3
+);
+
+}
+
+
+for(const q of coins){
+
+if(!q.got){
+
+x.fillStyle="#26321f";
+
+x.fillRect(
+q.x+2,
+q.y,
+3,
+7
+);
+
+x.fillRect(
+q.x,
+q.y+2,
+7,
+3
+);
+
+x.fillStyle="#eef3c7";
+
+x.fillRect(
+q.x+2,
+q.y+1,
+3,
+5
+);
+
+}
+
+}
+
+
+for(const e of foes){
+
+if(e.alive){
+
+x.fillStyle="#26321f";
+
+x.fillRect(
+e.x,
+e.y+3,
+12,
+8
+);
+
+x.fillRect(
+e.x+2,
+e.y,
+8,
+3
+);
+
+x.fillStyle="#dce8b8";
+
+x.fillRect(
+e.x+2,
+e.y+5,
+2,
+2
+);
+
+x.fillRect(
+e.x+8,
+e.y+5,
+2,
+2
+);
+
+}
+
+}
+
+
+x.fillStyle="#26321f";
+
+x.fillRect(
+goal.x,
+goal.y,
+3,
+30
+);
+
+x.fillRect(
+goal.x+3,
+goal.y,
+15,
+10
+);
+
+x.fillStyle="#c9d79d";
+
+x.fillRect(
+goal.x+6,
+goal.y+3,
+9,
+4
+);
+
+
+x.fillStyle="#1d281a";
+
+x.fillRect(
+p.x+3,
+p.y,
+7,
+3
+);
+
+x.fillRect(
+p.x+1,
+p.y+3,
+10,
+5
+);
+
+x.fillRect(
+p.x+3,
+p.y+8,
+7,
+5
+);
+
+x.fillRect(
+p.x,
+p.y+13,
+5,
+3
+);
+
+x.fillRect(
+p.x+8,
+p.y+13,
+5,
+3
+);
+
+x.fillStyle="#dce8b8";
+
+x.fillRect(
+p.x+4,
+p.y+4,
+5,
+2
+);
+
+
+x.restore();
+
+
+x.fillStyle="#1d281a";
+
+x.fillRect(
+0,
+0,
+W,
+16
+);
+
+x.fillStyle="#e5efc8";
+
+x.font="8px monospace";
+
+x.fillText(
+"RETRO LAND",
+5,
+10
+);
+
+x.fillText(
+"COINS "+
+String(p.coins).padStart(2,"0"),
+85,
+10
+);
+
+x.fillText(
+"LIVES "+p.lives,
+150,
+10
+);
+
+x.fillText(
+"WORLD 1-1",
+205,
+10
+);
+
+
+if(msg){
+
+x.fillStyle="rgba(20,28,17,.88)";
+
+x.fillRect(
+60,
+63,
+200,
+34
+);
+
+x.fillStyle="#e5efc8";
+
+x.font="bold 12px monospace";
+
+x.textAlign="center";
+
+x.fillText(
+msg,
+160,
+84
+);
+
+x.textAlign="left";
+
+}
+
+}
+
+
+/* =========================================================
+   GAME BOY BUTTONS
+========================================================= */
+
+const startBtn=
+document.getElementById("startBtn");
+
+const selectBtn=
+document.getElementById("selectBtn");
+
+const buttonA=
+document.getElementById("buttonA");
+
+const buttonB=
+document.getElementById("buttonB");
+
+
+function pressGBButton(name,e){
+
+if(e){
+
+e.preventDefault();
+e.stopPropagation();
+
+}
+
+gbJoypad[name]=1;
+
+setTimeout(
+function(){
+
+gbJoypad[name]=0;
+
+},
+600
+);
+
+}
+
+
+startBtn.addEventListener(
+"pointerdown",
+function(e){
+
+pressGBButton("START",e);
+
+},
+{passive:false}
+);
+
+
+selectBtn.addEventListener(
+"pointerdown",
+function(e){
+
+pressGBButton("SELECT",e);
+
+},
+{passive:false}
+);
+
+
+/* =========================================================
+   VIRTUAL A
+========================================================= */
+
+function pressA(e){
+
+if(e){
+
+e.preventDefault();
+e.stopPropagation();
+
+}
+
+virtualInput.a=1;
+
+setTimeout(
+function(){
+
+virtualInput.a=0;
+
+},
+600
+);
+
+}
+
+
+buttonA.addEventListener(
+"pointerdown",
+pressA,
+{passive:false}
+);
+
+
+/* =========================================================
+   VIRTUAL B
+========================================================= */
+
+function pressB(e){
+
+if(e){
+
+e.preventDefault();
+e.stopPropagation();
+
+}
+
+virtualInput.b=1;
+
+setTimeout(
+function(){
+
+virtualInput.b=0;
+
+},
+600
+);
+
+}
+
+
+buttonB.addEventListener(
+"pointerdown",
+pressB,
+{passive:false}
+);
+
+
+/* =========================================================
+   KEYBOARD
+========================================================= */
+
+function gameKey(e){
+
+let z=e.key.toLowerCase();
+
+if(
+z==="arrowleft" ||
+z==="arrowright" ||
+z==="arrowup" ||
+z==="arrowdown" ||
+z===" " ||
+z==="a" ||
+z==="d" ||
+z==="w" ||
+z==="z" ||
+z==="x" ||
+z==="shift"
+){
+
+e.preventDefault();
+
+}
+
+if(z==="arrowleft" || z==="a")
+keyboardInput.left=1;
+
+if(z==="arrowright" || z==="d")
+keyboardInput.right=1;
+
+if(z==="arrowup" || z==="w")
+keyboardInput.up=1;
+
+if(z==="arrowdown")
+keyboardInput.down=1;
+
+if(z===" ")
+keyboardInput.a=1;
+
+if(
+z==="z" ||
+z==="x" ||
+z==="shift"
+)
+keyboardInput.b=1;
+
+if(z==="enter"){
+e.preventDefault();
+gbJoypad.START=1;
+}
+
+if(z==="backspace"){
+e.preventDefault();
+gbJoypad.SELECT=1;
+}
+
+if(z==="escape"){
+
+e.preventDefault();
+
+pause=!pause;
+
+}
+
+}
+
+
+function gameKeyUp(e){
+
+let z=e.key.toLowerCase();
+
+if(
+z==="arrowleft" ||
+z==="arrowright" ||
+z==="arrowup" ||
+z==="arrowdown" ||
+z===" " ||
+z==="a" ||
+z==="d" ||
+z==="w" ||
+z==="z" ||
+z==="x" ||
+z==="shift"
+){
+
+e.preventDefault();
+
+}
+
+if(z==="arrowleft" || z==="a")
+keyboardInput.left=0;
+
+if(z==="arrowright" || z==="d")
+keyboardInput.right=0;
+
+if(z==="arrowup" || z==="w")
+keyboardInput.up=0;
+
+if(z==="arrowdown")
+keyboardInput.down=0;
+
+if(z===" ")
+keyboardInput.a=0;
+
+if(
+z==="z" ||
+z==="x" ||
+z==="shift"
+)
+keyboardInput.b=0;
+
+if(z==="enter"){
+e.preventDefault();
+gbJoypad.START=0;
+}
+
+if(z==="backspace"){
+e.preventDefault();
+gbJoypad.SELECT=0;
+}
+
+}
+
+
+document.addEventListener(
+"keydown",
+gameKey,
+{passive:false}
+);
+
+document.addEventListener(
+"keyup",
+gameKeyUp,
+{passive:false}
+);
+
+
+/* =========================================================
+   BLOCK PAGE SCROLL
+========================================================= */
+
+window.addEventListener(
+"wheel",
+function(e){
+
+e.preventDefault();
+
+},
+{passive:false}
+);
+
+window.addEventListener(
+"touchmove",
+function(e){
+
+e.preventDefault();
+
+},
+{passive:false}
+);
+
+
+/* =========================================================
+   GAMEPAD
+========================================================= */
+
+function gp(){
+
+let pads=
+navigator.getGamepads
+?
+navigator.getGamepads()
+:
+[];
+
+let g=null;
+
+for(const z of pads){
+
+if(z){
+
+g=z;
+break;
+
+}
+
+}
+
+
+gamepadInput.left=0;
+gamepadInput.right=0;
+gamepadInput.up=0;
+gamepadInput.down=0;
+gamepadInput.a=0;
+gamepadInput.b=0;
+
+
+if(g){
+
+let ax=g.axes||[];
+
+let left=false;
+let right=false;
+let up=false;
+let down=false;
+
+
+if(
+g.buttons[12] &&
+g.buttons[12].pressed
+)
+up=true;
+
+if(
+g.buttons[13] &&
+g.buttons[13].pressed
+)
+down=true;
+
+if(
+g.buttons[14] &&
+g.buttons[14].pressed
+)
+left=true;
+
+if(
+g.buttons[15] &&
+g.buttons[15].pressed
+)
+right=true;
+
+
+if((ax[0]||0)<-.35)
+left=true;
+
+if((ax[0]||0)>.35)
+right=true;
+
+if((ax[1]||0)<-.35)
+up=true;
+
+if((ax[1]||0)>.35)
+down=true;
+
+
+/* DualSense D-pad axis */
+
+if(Number.isFinite(ax[9])){
+
+let v=ax[9];
+
+if(Math.abs(v+1.000)<0.12)
+up=true;
+
+if(Math.abs(v-0.14286)<0.12)
+down=true;
+
+if(Math.abs(v-0.71429)<0.12)
+left=true;
+
+if(Math.abs(v+0.42857)<0.12)
+right=true;
+
+if(Math.abs(v+0.71429)<0.12){
+
+up=true;
+right=true;
+
+}
+
+if(Math.abs(v+0.14286)<0.12){
+
+down=true;
+right=true;
+
+}
+
+if(Math.abs(v-0.42857)<0.12){
+
+left=true;
+down=true;
+
+}
+
+if(Math.abs(v-1.000)<0.12){
+
+left=true;
+up=true;
+
+}
+
+}
+
+
+gamepadInput.left=left?1:0;
+gamepadInput.right=right?1:0;
+gamepadInput.up=up?1:0;
+gamepadInput.down=down?1:0;
+
+
+gamepadInput.a=
+(
+g.buttons[0] &&
+g.buttons[0].pressed
+)
+?
+1
+:
+0;
+
+
+gamepadInput.b=
+(
+g.buttons[1] &&
+g.buttons[1].pressed
+)
+?
+1
+:
+0;
+
+
+let options=
+g.buttons[9] &&
+g.buttons[9].pressed;
+
+if(options&&!opt){
+
+pause=!pause;
+
+opt=1;
+
+}
+
+if(!options)
+opt=0;
+
+}
+
+
+/* =========================================================
+   COMBINE INPUT
+========================================================= */
+
+k.l=
+(
+keyboardInput.left ||
+gamepadInput.left
+)
+?
+1
+:
+0;
+
+k.r=
+(
+keyboardInput.right ||
+gamepadInput.right
+)
+?
+1
+:
+0;
+
+k.j=
+(
+keyboardInput.up ||
+keyboardInput.a ||
+gamepadInput.a ||
+gamepadInput.up ||
+virtualInput.a
+)
+?
+1
+:
+0;
+
+k.d=
+(
+keyboardInput.b ||
+gamepadInput.b ||
+virtualInput.b
+)
+?
+1
+:
+0;
+
+
+gbJoypad.LEFT=
+(
+keyboardInput.left ||
+gamepadInput.left
+)
+?
+1
+:
+0;
+
+gbJoypad.RIGHT=
+(
+keyboardInput.right ||
+gamepadInput.right
+)
+?
+1
+:
+0;
+
+gbJoypad.UP=
+(
+keyboardInput.up ||
+gamepadInput.up
+)
+?
+1
+:
+0;
+
+gbJoypad.DOWN=
+(
+keyboardInput.down ||
+gamepadInput.down
+)
+?
+1
+:
+0;
+
+
+gbJoypad.A=
+(
+keyboardInput.a ||
+gamepadInput.a ||
+virtualInput.a
+)
+?
+1
+:
+0;
+
+gbJoypad.B=
+(
+keyboardInput.b ||
+gamepadInput.b ||
+virtualInput.b
+)
+?
+1
+:
+0;
+
+
+requestAnimationFrame(gp);
+
+}
+
+
+/* =========================================================
+   GAME BOY MEMORY
+========================================================= */
+
+const gbMemory=
+new Uint8Array(0x10000);
+
+const gbVRAM=
+new Uint8Array(0x2000);
+
+const gbOAM=
+new Uint8Array(0xA0);
+
+
+/* =========================================================
+   PERFORMANCE TILE CACHE
+========================================================= */
+
+/*
+   0x8000-0x97FF contains 384 possible 8x8 tile slots
+   used by the two DMG background addressing modes.
+
+   Each tile is decoded only when its VRAM data changes.
+*/
+
+const gbTileCache=
+new Uint8Array(
+384*64
+);
+
+const gbTileDirty=
+new Uint8Array(
+384
+);
+
+gbTileDirty.fill(1);
+
+
+function gbInvalidateTile(addr){
+
+const physical=
+(addr-0x8000)>>4;
+
+if(
+physical>=0 &&
+physical<384
+){
+
+gbTileDirty[physical]=1;
+
+}
+
+}
+
+
+function gbDecodeTile(tile){
+
+if(
+tile<0 ||
+tile>=384
+)
+return;
+
+if(!gbTileDirty[tile])
+return;
+
+const base=
+tile*64;
+
+const vbase=
+tile*16;
+
+for(let row=0;row<8;row++){
+
+const low=
+gbVRAM[vbase+row*2];
+
+const high=
+gbVRAM[vbase+row*2+1];
+
+const out=
+base+row*8;
+
+for(let px=0;px<8;px++){
+
+const bit=7-px;
+
+gbTileCache[out+px]=
+((high>>bit)&1)*2+
+((low>>bit)&1);
+
+}
+
+}
+
+gbTileDirty[tile]=0;
+
+}
+
+
+/* =========================================================
+   CARTRIDGE
+========================================================= */
+
+const gbCartridge={
+
+rom:null,
+romSize:0,
+
+ram:new Uint8Array(0x8000),
+
+romBank:1,
+ramBank:0,
+
+mbcType:0,
+
+ramEnabled:false,
+
+bankingMode:0
+
+};
+
+
+/* =========================================================
+   PPU
+========================================================= */
+
+const gbPPU={
+
+lcdc:0x91,
+stat:0x85,
+
+scy:0x00,
+scx:0x00,
+
+lyc:0x00,
+
+bgp:0xFC,
+obp0:0xFF,
+obp1:0xFF,
+
+wy:0x00,
+wx:0x00,
+
+ly:0x00,
+cycles:0,
+mode:2,
+
+statIRQLine:false,
+
+lineSCX:new Uint8Array(144),
+lineSCY:new Uint8Array(144)
+
+};
+
+
+/* =========================================================
+   TIMER
+========================================================= */
+
+const gbTimer={
+
+div:0,
+tima:0,
+tma:0,
+tac:0,
+counter:0
+
+};
+
+
+/* =========================================================
+   AUDIO STATE
+========================================================= */
+
+const gbAPU={
+
+active:[
+0,
+0,
+0,
+0
+],
+
+phase:[
+0,
+0,
+0,
+0
+],
+
+noisePhase:0,
+noiseLFSR:0x7FFF
+
+};
+
+
+/* =========================================================
+   MBC1
+========================================================= */
+
+function gbMBC1ROMBank(){
+
+if(gbCartridge.mbcType!==1)
+return 1;
+
+let bank=
+gbCartridge.romBank&0x1F;
+
+if(bank===0)
+bank=1;
+
+if(gbCartridge.bankingMode===0){
+
+bank|=
+(gbCartridge.ramBank&3)<<5;
+
+}
+
+return bank;
+
+}
+
+
+function gbMBC1RAMBank(){
+
+if(gbCartridge.bankingMode===0)
+return 0;
+
+return gbCartridge.ramBank&3;
+
+}
+
+
+/* =========================================================
+   ROM READ
+========================================================= */
+
+function gbReadROM(addr){
+
+addr&=0xFFFF;
+
+if(!gbCartridge.rom)
+return 0xFF;
+
+
+if(addr<0x4000){
+
+let bank=0;
+
+if(
+gbCartridge.mbcType===1 &&
+gbCartridge.bankingMode===0
+){
+
+bank=
+(gbCartridge.ramBank&3)<<5;
+
+}
+
+const index=
+bank*0x4000+addr;
+
+if(index<gbCartridge.rom.length)
+return gbCartridge.rom[index];
+
+return 0xFF;
+
+}
+
+
+if(addr<0x8000){
+
+const bank=
+gbMBC1ROMBank();
+
+const index=
+bank*0x4000+
+(addr-0x4000);
+
+if(index<gbCartridge.rom.length)
+return gbCartridge.rom[index];
+
+return 0xFF;
+
+}
+
+
+return 0xFF;
+
+}
+
+
+/* =========================================================
+   MEMORY READ
+========================================================= */
+
+function gbRead(addr){
+
+addr&=0xFFFF;
+
+
+if(addr<0x8000)
+return gbReadROM(addr);
+
+
+if(
+addr>=0x8000 &&
+addr<=0x9FFF
+){
+
+return gbVRAM[
+addr-0x8000
+];
+
+}
+
+
+if(
+addr>=0xA000 &&
+addr<0xC000
+){
+
+if(!gbCartridge.ramEnabled)
+return 0xFF;
+
+const bank=
+gbMBC1RAMBank();
+
+return gbCartridge.ram[
+bank*0x2000+
+(addr-0xA000)
+];
+
+}
+
+
+if(
+addr>=0xC000 &&
+addr<0xE000
+){
+
+return gbMemory[addr];
+
+}
+
+
+if(
+addr>=0xE000 &&
+addr<0xFE00
+){
+
+return gbMemory[
+addr-0x2000
+];
+
+}
+
+
+if(
+addr>=0xFE00 &&
+addr<=0xFE9F
+){
+
+return gbOAM[
+addr-0xFE00
+];
+
+}
+
+
+if(
+addr>=0xFEA0 &&
+addr<0xFF00
+){
+
+return 0xFF;
+
+}
+
+
+if(addr===0xFF00)
+return gbJoypadRead();
+
+
+if(addr===0xFF04)
+return(
+gbTimer.div>>8
+)&0xFF;
+
+if(addr===0xFF05)
+return gbTimer.tima;
+
+if(addr===0xFF06)
+return gbTimer.tma;
+
+if(addr===0xFF07)
+return gbTimer.tac|0xF8;
+
+
+if(addr===0xFF0F)
+return gbMemory[0xFF0F];
+
+
+/* APU */
+
+if(addr===0xFF26){
+
+let value=
+gbMemory[0xFF26]&0x80;
+
+if(gbAPU.active[0])
+value|=0x01;
+
+if(gbAPU.active[1])
+value|=0x02;
+
+if(gbAPU.active[2])
+value|=0x04;
+
+if(gbAPU.active[3])
+value|=0x08;
+
+return value|0x70;
+
+}
+
+
+if(
+addr>=0xFF10 &&
+addr<=0xFF25
+){
+
+return gbMemory[addr];
+
+}
+
+
+if(
+addr>=0xFF30 &&
+addr<=0xFF3F
+){
+
+return gbMemory[addr];
+
+}
+
+
+/* PPU */
+
+if(addr===0xFF40)
+return gbPPU.lcdc;
+
+if(addr===0xFF41)
+return gbPPU.stat|0x80;
+
+if(addr===0xFF42)
+return gbPPU.scy;
+
+if(addr===0xFF43)
+return gbPPU.scx;
+
+if(addr===0xFF44)
+return gbPPU.ly;
+
+if(addr===0xFF45)
+return gbPPU.lyc;
+
+if(addr===0xFF47)
+return gbPPU.bgp;
+
+if(addr===0xFF48)
+return gbPPU.obp0;
+
+if(addr===0xFF49)
+return gbPPU.obp1;
+
+if(addr===0xFF4A)
+return gbPPU.wy;
+
+if(addr===0xFF4B)
+return gbPPU.wx;
+
+
+if(addr===0xFFFF)
+return gbMemory[0xFFFF];
+
+
+return gbMemory[addr];
+
+}
+
+
+/* =========================================================
+   DMA
+========================================================= */
+
+function gbDMA(value){
+
+const source=
+(value&0xFF)<<8;
+
+for(let i=0;i<0xA0;i++){
+
+gbOAM[i]=
+gbRead(
+(source+i)&0xFFFF
+);
+
+}
+
+}
+
+
+/* =========================================================
+   AUDIO WRITE HANDLING
+========================================================= */
+
+function gbAPUWrite(addr,value){
+
+gbMemory[addr]=value&0xFF;
+
+
+/* =========================================================
+   APU MASTER
+========================================================= */
+
+if(addr===0xFF26){
+
+if(!(value&0x80)){
+
+gbAPU.active[0]=0;
+gbAPU.active[1]=0;
+gbAPU.active[2]=0;
+gbAPU.active[3]=0;
+
+for(
+let a=0xFF10;
+a<=0xFF25;
+a++
+){
+
+gbMemory[a]=0;
+
+}
+
+gbMemory[0xFF26]=0;
+
+}
+else{
+
+gbMemory[0xFF26]=
+(value&0x80)|0x70;
+
+}
+
+return;
+
+}
+
+
+/* =========================================================
+   CHANNEL 1 TRIGGER
+========================================================= */
+
+if(
+addr===0xFF14 &&
+(value&0x80)
+){
+
+if(
+(gbMemory[0xFF12]&0xF8)!==0
+){
+
+gbAPU.active[0]=1;
+
+/* Restart waveform immediately. */
+gbAPU.phase[0]=0;
+
+/* Restart envelope from its initial volume. */
+if(window.GBAudio){
+
+GBAudio.envelopeVolume[0]=
+(gbMemory[0xFF12]>>4)&15;
+
+GBAudio.envelopeTimer[0]=0;
+
+GBAudio.envelopeLastReg[0]=
+gbMemory[0xFF12];
+
+/* Restart sweep state. */
+GBAudio.sweepFrequency=
+gbMemory[0xFF13]|
+((gbMemory[0xFF14]&7)<<8);
+
+GBAudio.sweepTimer=0;
+
+GBAudio.sweepEnabled=
+((gbMemory[0xFF10]>>4)&7)!==0;
+
+GBAudio.sweepLastReg=
+gbMemory[0xFF10];
+
+}
+
+}
+
+}
+
+
+/* =========================================================
+   CHANNEL 2 TRIGGER
+========================================================= */
+
+if(
+addr===0xFF19 &&
+(value&0x80)
+){
+
+if(
+(gbMemory[0xFF17]&0xF8)!==0
+){
+
+gbAPU.active[1]=1;
+
+/* Restart waveform immediately. */
+gbAPU.phase[1]=0;
+
+/* Restart envelope. */
+if(window.GBAudio){
+
+GBAudio.envelopeVolume[1]=
+(gbMemory[0xFF17]>>4)&15;
+
+GBAudio.envelopeTimer[1]=0;
+
+GBAudio.envelopeLastReg[1]=
+gbMemory[0xFF17];
+
+}
+
+}
+
+}
+
+
+/* =========================================================
+   CHANNEL 3 TRIGGER
+========================================================= */
+
+if(
+addr===0xFF1E &&
+(value&0x80)
+){
+
+if(
+gbMemory[0xFF1A]&0x80
+){
+
+gbAPU.active[2]=1;
+
+/* Restart wave position. */
+gbAPU.phase[2]=0;
+
+}
+
+}
+
+
+/* =========================================================
+   CHANNEL 4 TRIGGER
+========================================================= */
+
+if(
+addr===0xFF23 &&
+(value&0x80)
+){
+
+if(
+(gbMemory[0xFF21]&0xF8)!==0
+){
+
+gbAPU.active[3]=1;
+
+/* Restart noise generator. */
+gbAPU.noisePhase=0;
+gbAPU.noiseLFSR=0x7FFF;
+
+/* Restart noise envelope. */
+if(window.GBAudio){
+
+GBAudio.envelopeVolume[3]=
+(gbMemory[0xFF21]>>4)&15;
+
+GBAudio.envelopeTimer[3]=0;
+
+GBAudio.envelopeLastReg[3]=
+gbMemory[0xFF21];
+
+}
+
+}
+
+}
+
+}
+
+/* =========================================================
+   MEMORY WRITE
+========================================================= */
+
+function gbWrite(addr,value){
+
+addr&=0xFFFF;
+value&=0xFF;
+
+
+/* MBC */
+
+if(addr<0x8000){
+
+if(gbCartridge.mbcType===1){
+
+if(addr<0x2000){
+
+gbCartridge.ramEnabled=
+(value&0x0F)===0x0A;
+
+return;
+
+}
+
+if(addr<0x4000){
+
+let bank=
+value&0x1F;
+
+if(bank===0)
+bank=1;
+
+gbCartridge.romBank=
+bank&0x1F;
+
+return;
+
+}
+
+if(addr<0x6000){
+
+gbCartridge.ramBank=
+value&0x03;
+
+return;
+
+}
+
+if(addr<0x8000){
+
+gbCartridge.bankingMode=
+value&1;
+
+return;
+
+}
+
+}
+
+return;
+
+}
+
+
+/* VRAM */
+
+if(
+addr>=0x8000 &&
+addr<=0x9FFF
+){
+
+gbVRAM[
+addr-0x8000
+]=value;
+
+gbInvalidateTile(addr);
+
+return;
+
+}
+
+
+/* CARTRIDGE RAM */
+
+if(
+addr>=0xA000 &&
+addr<0xC000
+){
+
+if(!gbCartridge.ramEnabled)
+return;
+
+const bank=
+gbMBC1RAMBank();
+
+gbCartridge.ram[
+bank*0x2000+
+(addr-0xA000)
+]=value;
+
+return;
+
+}
+
+
+/* WRAM */
+
+if(
+addr>=0xC000 &&
+addr<0xE000
+){
+
+gbMemory[addr]=value;
+
+return;
+
+}
+
+
+/* ECHO */
+
+if(
+addr>=0xE000 &&
+addr<0xFE00
+){
+
+gbMemory[
+addr-0x2000
+]=value;
+
+return;
+
+}
+
+
+/* OAM */
+
+if(
+addr>=0xFE00 &&
+addr<=0xFE9F
+){
+
+gbOAM[
+addr-0xFE00
+]=value;
+
+return;
+
+}
+
+
+/* UNUSABLE */
+
+if(
+addr>=0xFEA0 &&
+addr<0xFF00
+){
+
+return;
+
+}
+
+
+/* JOYPAD */
+
+if(addr===0xFF00){
+
+gbJoypad.selectButtons=
+!!(value&0x20);
+
+gbJoypad.selectDpad=
+!!(value&0x10);
+
+gbMemory[0xFF00]=
+(value&0x30)|0xCF;
+
+return;
+
+}
+
+
+/* TIMER */
+
+if(addr===0xFF04){
+
+gbTimer.div=0;
+
+return;
+
+}
+
+if(addr===0xFF05){
+
+gbTimer.tima=value;
+
+return;
+
+}
+
+if(addr===0xFF06){
+
+gbTimer.tma=value;
+
+return;
+
+}
+
+if(addr===0xFF07){
+
+gbTimer.tac=value&7;
+
+return;
+
+}
+
+
+/* IF */
+
+if(addr===0xFF0F){
+
+gbMemory[0xFF0F]=
+value|0xE0;
+
+return;
+
+}
+
+
+/* APU */
+
+if(
+addr>=0xFF10 &&
+addr<=0xFF26
+){
+
+gbAPUWrite(addr,value);
+
+return;
+
+}
+
+
+/* WAVE RAM */
+
+if(
+addr>=0xFF30 &&
+addr<=0xFF3F
+){
+
+gbMemory[addr]=value;
+
+return;
+
+}
+
+
+/* PPU */
+
+if(addr===0xFF40){
+
+gbPPU.lcdc=value;
+
+return;
+
+}
+
+if(addr===0xFF41){
+
+gbPPU.stat=
+(value&0x78)|
+(gbPPU.stat&0x07)|
+0x80;
+
+return;
+
+}
+
+if(addr===0xFF42){
+
+gbPPU.scy=value;
+
+return;
+
+}
+
+if(addr===0xFF43){
+
+gbPPU.scx=value;
+
+return;
+
+}
+
+if(addr===0xFF44)
+return;
+
+if(addr===0xFF45){
+
+gbPPU.lyc=value;
+
+return;
+
+}
+
+if(addr===0xFF46){
+
+gbDMA(value);
+
+return;
+
+}
+
+if(addr===0xFF47){
+
+gbPPU.bgp=value;
+
+return;
+
+}
+
+if(addr===0xFF48){
+
+gbPPU.obp0=value;
+
+return;
+
+}
+
+if(addr===0xFF49){
+
+gbPPU.obp1=value;
+
+return;
+
+}
+
+if(addr===0xFF4A){
+
+gbPPU.wy=value;
+
+return;
+
+}
+
+if(addr===0xFF4B){
+
+gbPPU.wx=value;
+
+return;
+
+}
+
+
+if(addr===0xFFFF){
+
+gbMemory[0xFFFF]=value;
+
+return;
+
+}
+
+
+gbMemory[addr]=value;
+
+}
+
+
+/* =========================================================
+   HARDWARE RESET
+========================================================= */
+
+function gbHardwareReset(){
+
+gbMemory.fill(0);
+gbVRAM.fill(0);
+gbOAM.fill(0);
+
+gbCartridge.ram.fill(0);
+
+gbTimer.div=0;
+gbTimer.tima=0;
+gbTimer.tma=0;
+gbTimer.tac=0;
+gbTimer.counter=0;
+
+
+gbPPU.lcdc=0x91;
+gbPPU.stat=0x85;
+
+gbPPU.scy=0;
+gbPPU.scx=0;
+
+gbPPU.lyc=0;
+
+gbPPU.bgp=0xFC;
+gbPPU.obp0=0xFF;
+gbPPU.obp1=0xFF;
+
+gbPPU.wy=0;
+gbPPU.wx=0;
+
+gbPPU.ly=0;
+gbPPU.cycles=0;
+gbPPU.mode=2;
+
+gbPPU.statIRQLine=false;
+
+gbPPU.lineSCX.fill(0);
+gbPPU.lineSCY.fill(0);
+
+gbPPU.lineSCX[0]=gbPPU.scx;
+gbPPU.lineSCY[0]=gbPPU.scy;
+
+
+gbJoypad.A=0;
+gbJoypad.B=0;
+gbJoypad.SELECT=0;
+gbJoypad.START=0;
+
+gbJoypad.UP=0;
+gbJoypad.DOWN=0;
+gbJoypad.LEFT=0;
+gbJoypad.RIGHT=0;
+
+gbJoypad.selectButtons=1;
+gbJoypad.selectDpad=1;
+
+
+gbAPU.active[0]=0;
+gbAPU.active[1]=0;
+gbAPU.active[2]=0;
+gbAPU.active[3]=0;
+
+gbAPU.phase[0]=0;
+gbAPU.phase[1]=0;
+gbAPU.phase[2]=0;
+gbAPU.phase[3]=0;
+
+gbAPU.noisePhase=0;
+gbAPU.noiseLFSR=0x7FFF;
+
+
+/* Game Boy-like power-up sound register values */
+
+gbMemory[0xFF10]=0x80;
+gbMemory[0xFF11]=0xBF;
+gbMemory[0xFF12]=0xF3;
+gbMemory[0xFF13]=0xFF;
+gbMemory[0xFF14]=0xBF;
+
+gbMemory[0xFF16]=0x3F;
+gbMemory[0xFF17]=0x00;
+gbMemory[0xFF18]=0xFF;
+gbMemory[0xFF19]=0xBF;
+
+gbMemory[0xFF1A]=0x7F;
+gbMemory[0xFF1B]=0xFF;
+gbMemory[0xFF1C]=0x9F;
+gbMemory[0xFF1D]=0xFF;
+gbMemory[0xFF1E]=0xBF;
+
+gbMemory[0xFF20]=0xFF;
+gbMemory[0xFF21]=0x00;
+gbMemory[0xFF22]=0x00;
+gbMemory[0xFF23]=0xBF;
+
+gbMemory[0xFF24]=0x77;
+gbMemory[0xFF25]=0xF3;
+gbMemory[0xFF26]=0xF1;
+
+
+/* registers */
+
+gbMemory[0xFF00]=0xCF;
+gbMemory[0xFF0F]=0xE1;
+
+gbMemory[0xFF40]=0x91;
+gbMemory[0xFF41]=0x85;
+
+gbMemory[0xFF47]=0xFC;
+gbMemory[0xFF48]=0xFF;
+gbMemory[0xFF49]=0xFF;
+
+gbMemory[0xFFFF]=0x00;
+
+
+/* Mark every tile dirty after reset */
+
+gbTileDirty.fill(1);
+
+}
+
+
+/* =========================================================
+   CPU
+========================================================= */
+
+class GBCPU{
+
+constructor(){
+
+this.a=0x01;
+this.f=0xB0;
+
+this.b=0x00;
+this.c=0x13;
+
+this.d=0x00;
+this.e=0xD8;
+
+this.h=0x01;
+this.l=0x4D;
+
+this.sp=0xFFFE;
+this.pc=0x0100;
+
+this.halted=false;
+this.stopped=false;
+
+this.ime=false;
+this.imeDelay=0;
+
+}
+
+
+get af(){
+return(
+(this.a<<8)|
+(this.f&0xF0)
+);
+}
+
+set af(v){
+
+this.a=(v>>8)&0xFF;
+this.f=v&0xF0;
+
+}
+
+
+get bc(){
+return(
+(this.b<<8)|
+this.c
+);
+}
+
+set bc(v){
+
+this.b=(v>>8)&0xFF;
+this.c=v&0xFF;
+
+}
+
+
+get de(){
+return(
+(this.d<<8)|
+this.e
+);
+}
+
+set de(v){
+
+this.d=(v>>8)&0xFF;
+this.e=v&0xFF;
+
+}
+
+
+get hl(){
+return(
+(this.h<<8)|
+this.l
+);
+}
+
+set hl(v){
+
+this.h=(v>>8)&0xFF;
+this.l=v&0xFF;
+
+}
+
+
+get Z(){
+return !!(this.f&0x80);
+}
+
+set Z(v){
+
+if(v)
+this.f|=0x80;
+else
+this.f&=~0x80;
+
+}
+
+
+get N(){
+return !!(this.f&0x40);
+}
+
+set N(v){
+
+if(v)
+this.f|=0x40;
+else
+this.f&=~0x40;
+
+}
+
+
+get H(){
+return !!(this.f&0x20);
+}
+
+set H(v){
+
+if(v)
+this.f|=0x20;
+else
+this.f&=~0x20;
+
+}
+
+
+get CARRY(){
+return !!(this.f&0x10);
+}
+
+set CARRY(v){
+
+if(v)
+this.f|=0x10;
+else
+this.f&=~0x10;
+
+}
+
+
+read(addr){
+return gbRead(addr);
+}
+
+write(addr,value){
+gbWrite(addr,value);
+}
+
+
+fetch8(){
+
+const v=this.read(this.pc);
+
+this.pc=
+(this.pc+1)&0xFFFF;
+
+return v;
+
+}
+
+
+fetch16(){
+
+const lo=this.fetch8();
+const hi=this.fetch8();
+
+return lo|(hi<<8);
+
+}
+
+
+push16(v){
+
+this.sp=
+(this.sp-1)&0xFFFF;
+
+this.write(
+this.sp,
+(v>>8)&0xFF
+);
+
+this.sp=
+(this.sp-1)&0xFFFF;
+
+this.write(
+this.sp,
+v&0xFF
+);
+
+}
+
+
+pop16(){
+
+const lo=
+this.read(this.sp);
+
+this.sp=
+(this.sp+1)&0xFFFF;
+
+const hi=
+this.read(this.sp);
+
+this.sp=
+(this.sp+1)&0xFFFF;
+
+return lo|(hi<<8);
+
+}
+
+
+reset(){
+
+this.a=0x01;
+this.f=0xB0;
+
+this.b=0x00;
+this.c=0x13;
+
+this.d=0x00;
+this.e=0xD8;
+
+this.h=0x01;
+this.l=0x4D;
+
+this.sp=0xFFFE;
+this.pc=0x0100;
+
+this.halted=false;
+this.stopped=false;
+
+this.ime=false;
+this.imeDelay=0;
+
+}
+
+
+getR(n){
+
+switch(n){
+
+case 0:return this.b;
+case 1:return this.c;
+case 2:return this.d;
+case 3:return this.e;
+case 4:return this.h;
+case 5:return this.l;
+case 6:return this.read(this.hl);
+case 7:return this.a;
+
+}
+
+return 0;
+
+}
+
+
+setR(n,v){
+
+v&=0xFF;
+
+switch(n){
+
+case 0:this.b=v;break;
+case 1:this.c=v;break;
+case 2:this.d=v;break;
+case 3:this.e=v;break;
+case 4:this.h=v;break;
+case 5:this.l=v;break;
+case 6:this.write(this.hl,v);break;
+case 7:this.a=v;break;
+
+}
+
+}
+
+
+inc8(v){
+
+const old=v&0xFF;
+
+v=(v+1)&0xFF;
+
+this.Z=v===0;
+this.N=0;
+this.H=((old&0x0F)+1)>0x0F;
+
+return v;
+
+}
+
+
+dec8(v){
+
+const old=v&0xFF;
+
+v=(v-1)&0xFF;
+
+this.Z=v===0;
+this.N=1;
+this.H=(old&0x0F)===0;
+
+return v;
+
+}
+
+
+addA(v){
+
+v&=0xFF;
+
+const a=this.a;
+const result=a+v;
+
+this.a=result&0xFF;
+
+this.Z=this.a===0;
+this.N=0;
+this.H=((a&15)+(v&15))>15;
+this.CARRY=result>255;
+
+}
+
+
+adcA(v){
+
+v&=0xFF;
+
+const carry=this.CARRY?1:0;
+const a=this.a;
+const result=a+v+carry;
+
+this.a=result&0xFF;
+
+this.Z=this.a===0;
+this.N=0;
+this.H=((a&15)+(v&15)+carry)>15;
+this.CARRY=result>255;
+
+}
+
+
+subA(v){
+
+v&=0xFF;
+
+const a=this.a;
+const result=a-v;
+
+this.a=result&0xFF;
+
+this.Z=this.a===0;
+this.N=1;
+this.H=(a&15)<(v&15);
+this.CARRY=a<v;
+
+}
+
+
+sbcA(v){
+
+v&=0xFF;
+
+const carry=this.CARRY?1:0;
+const a=this.a;
+const result=a-v-carry;
+
+this.a=result&0xFF;
+
+this.Z=this.a===0;
+this.N=1;
+this.H=((a&15)-(v&15)-carry)<0;
+this.CARRY=result<0;
+
+}
+
+
+cpA(v){
+
+v&=0xFF;
+
+const a=this.a;
+const result=a-v;
+
+this.Z=(result&0xFF)===0;
+this.N=1;
+this.H=(a&15)<(v&15);
+this.CARRY=a<v;
+
+}
+
+
+xorA(v){
+
+this.a=
+(this.a^(v&0xFF))&0xFF;
+
+this.Z=this.a===0;
+this.N=0;
+this.H=0;
+this.CARRY=0;
+
+}
+
+
+orA(v){
+
+this.a=
+(this.a|(v&0xFF))&0xFF;
+
+this.Z=this.a===0;
+this.N=0;
+this.H=0;
+this.CARRY=0;
+
+}
+
+
+andA(v){
+
+this.a=
+(this.a&(v&0xFF))&0xFF;
+
+this.Z=this.a===0;
+this.N=0;
+this.H=1;
+this.CARRY=0;
+
+}
+
+
+serviceInterrupts(){
+
+const ie=this.read(0xFFFF);
+const iff=this.read(0xFF0F);
+const pending=ie&iff&0x1F;
+
+if(!pending)
+return 0;
+
+if(this.halted)
+this.halted=false;
+
+if(!this.ime)
+return 0;
+
+let vector=0;
+let mask=0;
+
+if(pending&0x01){
+
+vector=0x40;
+mask=0x01;
+
+}
+else if(pending&0x02){
+
+vector=0x48;
+mask=0x02;
+
+}
+else if(pending&0x04){
+
+vector=0x50;
+mask=0x04;
+
+}
+else if(pending&0x08){
+
+vector=0x58;
+mask=0x08;
+
+}
+else if(pending&0x10){
+
+vector=0x60;
+mask=0x10;
+
+}
+
+if(!vector)
+return 0;
+
+this.write(
+0xFF0F,
+this.read(0xFF0F)&~mask
+);
+
+this.ime=false;
+
+this.push16(this.pc);
+
+this.pc=vector;
+
+return 20;
+
+}
+
+
+step(){
+
+const interruptCycles=
+this.serviceInterrupts();
+
+if(interruptCycles)
+return interruptCycles;
+
+if(this.stopped)
+return 4;
+
+if(this.halted)
+return 4;
+
+
+try{
+
+const op=this.fetch8();
+
+
+/* LD r,r */
+
+if(
+op>=0x40 &&
+op<=0x7F
+){
+
+if(op===0x76){
+
+this.halted=true;
+
+return 4;
+
+}
+
+const dst=(op>>3)&7;
+const src=op&7;
+
+this.setR(
+dst,
+this.getR(src)
+);
+
+return(
+dst===6 ||
+src===6
+)
+?
+8
+:
+4;
+
+}
+
+
+/* ALU A,r */
+
+if(
+op>=0x80 &&
+op<=0xBF
+){
+
+const r=op&7;
+const v=this.getR(r);
+
+if(op<0x88)
+this.addA(v);
+else if(op<0x90)
+this.adcA(v);
+else if(op<0x98)
+this.subA(v);
+else if(op<0xA0)
+this.sbcA(v);
+else if(op<0xA8)
+this.andA(v);
+else if(op<0xB0)
+this.xorA(v);
+else if(op<0xB8)
+this.orA(v);
+else
+this.cpA(v);
+
+return r===6?8:4;
+
+}
+
+
+/* INC */
+
+if(
+(op&0xC7)===0x04
+){
+
+const r=(op>>3)&7;
+
+this.setR(
+r,
+this.inc8(this.getR(r))
+);
+
+return r===6?12:4;
+
+}
+
+
+/* DEC */
+
+if(
+(op&0xC7)===0x05
+){
+
+const r=(op>>3)&7;
+
+this.setR(
+r,
+this.dec8(this.getR(r))
+);
+
+return r===6?12:4;
+
+}
+
+
+switch(op){
+
+case 0x00:
+return 4;
+
+case 0x10:
+
+this.fetch8();
+this.stopped=true;
+
+return 4;
+
+
+/* 16 bit */
+
+case 0x01:
+this.bc=this.fetch16();
+return 12;
+
+case 0x11:
+this.de=this.fetch16();
+return 12;
+
+case 0x21:
+this.hl=this.fetch16();
+return 12;
+
+case 0x31:
+this.sp=this.fetch16();
+return 12;
+
+
+case 0x03:
+this.bc=(this.bc+1)&0xFFFF;
+return 8;
+
+case 0x13:
+this.de=(this.de+1)&0xFFFF;
+return 8;
+
+case 0x23:
+this.hl=(this.hl+1)&0xFFFF;
+return 8;
+
+case 0x33:
+this.sp=(this.sp+1)&0xFFFF;
+return 8;
+
+
+case 0x0B:
+this.bc=(this.bc-1)&0xFFFF;
+return 8;
+
+case 0x1B:
+this.de=(this.de-1)&0xFFFF;
+return 8;
+
+case 0x2B:
+this.hl=(this.hl-1)&0xFFFF;
+return 8;
+
+case 0x3B:
+this.sp=(this.sp-1)&0xFFFF;
+return 8;
+
+
+/* LD r,n */
+
+case 0x06:
+this.b=this.fetch8();
+return 8;
+
+case 0x0E:
+this.c=this.fetch8();
+return 8;
+
+case 0x16:
+this.d=this.fetch8();
+return 8;
+
+case 0x1E:
+this.e=this.fetch8();
+return 8;
+
+case 0x26:
+this.h=this.fetch8();
+return 8;
+
+case 0x2E:
+this.l=this.fetch8();
+return 8;
+
+case 0x36:
+
+this.write(
+this.hl,
+this.fetch8()
+);
+
+return 12;
+
+case 0x3E:
+this.a=this.fetch8();
+return 8;
+
+
+/* memory */
+
+case 0x02:
+
+this.write(this.bc,this.a);
+return 8;
+
+case 0x12:
+
+this.write(this.de,this.a);
+return 8;
+
+case 0x0A:
+
+this.a=this.read(this.bc);
+return 8;
+
+case 0x1A:
+
+this.a=this.read(this.de);
+return 8;
+
+case 0x22:
+
+this.write(this.hl,this.a);
+
+this.hl=
+(this.hl+1)&0xFFFF;
+
+return 8;
+
+case 0x32:
+
+this.write(this.hl,this.a);
+
+this.hl=
+(this.hl-1)&0xFFFF;
+
+return 8;
+
+case 0x2A:
+
+this.a=this.read(this.hl);
+
+this.hl=
+(this.hl+1)&0xFFFF;
+
+return 8;
+
+case 0x3A:
+
+this.a=this.read(this.hl);
+
+this.hl=
+(this.hl-1)&0xFFFF;
+
+return 8;
+
+
+/* ADD HL */
+
+case 0x09:{
+
+const old=this.hl;
+const v=this.bc;
+const result=old+v;
+
+this.N=0;
+this.H=((old&0xFFF)+(v&0xFFF))>0xFFF;
+this.CARRY=result>0xFFFF;
+
+this.hl=result&0xFFFF;
+
+return 8;
+
+}
+
+case 0x19:{
+
+const old=this.hl;
+const v=this.de;
+const result=old+v;
+
+this.N=0;
+this.H=((old&0xFFF)+(v&0xFFF))>0xFFF;
+this.CARRY=result>0xFFFF;
+
+this.hl=result&0xFFFF;
+
+return 8;
+
+}
+
+case 0x29:{
+
+const old=this.hl;
+const v=this.hl;
+const result=old+v;
+
+this.N=0;
+this.H=((old&0xFFF)+(v&0xFFF))>0xFFF;
+this.CARRY=result>0xFFFF;
+
+this.hl=result&0xFFFF;
+
+return 8;
+
+}
+
+case 0x39:{
+
+const old=this.hl;
+const v=this.sp;
+const result=old+v;
+
+this.N=0;
+this.H=((old&0xFFF)+(v&0xFFF))>0xFFF;
+this.CARRY=result>0xFFFF;
+
+this.hl=result&0xFFFF;
+
+return 8;
+
+}
+
+
+/* DAA */
+
+case 0x27:{
+
+let a=this.a;
+let correction=0;
+
+if(!this.N){
+
+if(this.H||(a&15)>9)
+correction|=6;
+
+if(this.CARRY||a>0x99){
+
+correction|=0x60;
+this.CARRY=1;
+
+}
+
+a=(a+correction)&0xFF;
+
+}
+else{
+
+if(this.H)
+correction|=6;
+
+if(this.CARRY)
+correction|=0x60;
+
+a=(a-correction)&0xFF;
+
+}
+
+this.a=a;
+this.Z=this.a===0;
+this.H=0;
+
+return 4;
+
+}
+
+
+/* ROTATE A */
+
+case 0x07:{
+
+const carry=
+(this.a&0x80)!==0;
+
+this.a=
+((this.a<<1)&0xFF)|
+(carry?1:0);
+
+this.Z=0;
+this.N=0;
+this.H=0;
+this.CARRY=carry;
+
+return 4;
+
+}
+
+case 0x0F:{
+
+const carry=
+(this.a&1)!==0;
+
+this.a=
+(this.a>>1)|
+(carry?0x80:0);
+
+this.Z=0;
+this.N=0;
+this.H=0;
+this.CARRY=carry;
+
+return 4;
+
+}
+
+case 0x17:{
+
+const oldCarry=
+this.CARRY?1:0;
+
+const newCarry=
+(this.a&0x80)!==0;
+
+this.a=
+((this.a<<1)&0xFF)|
+oldCarry;
+
+this.Z=0;
+this.N=0;
+this.H=0;
+this.CARRY=newCarry;
+
+return 4;
+
+}
+
+case 0x1F:{
+
+const oldCarry=
+this.CARRY?1:0;
+
+const newCarry=
+(this.a&1)!==0;
+
+this.a=
+(this.a>>1)|
+(oldCarry?0x80:0);
+
+this.Z=0;
+this.N=0;
+this.H=0;
+this.CARRY=newCarry;
+
+return 4;
+
+}
+
+
+/* CPL SCF CCF */
+
+case 0x2F:
+
+this.a=(~this.a)&0xFF;
+
+this.N=1;
+this.H=1;
+
+return 4;
+
+case 0x37:
+
+this.N=0;
+this.H=0;
+this.CARRY=1;
+
+return 4;
+
+case 0x3F:
+
+this.N=0;
+this.H=0;
+this.CARRY=!this.CARRY;
+
+return 4;
+
+
+/* immediate ALU */
+
+case 0xC6:
+this.addA(this.fetch8());
+return 8;
+
+case 0xCE:
+this.adcA(this.fetch8());
+return 8;
+
+case 0xD6:
+this.subA(this.fetch8());
+return 8;
+
+case 0xDE:
+this.sbcA(this.fetch8());
+return 8;
+
+case 0xE6:
+this.andA(this.fetch8());
+return 8;
+
+case 0xEE:
+this.xorA(this.fetch8());
+return 8;
+
+case 0xF6:
+this.orA(this.fetch8());
+return 8;
+
+case 0xFE:
+this.cpA(this.fetch8());
+return 8;
+
+case 0xAF:
+
+this.a=0;
+
+this.Z=1;
+this.N=0;
+this.H=0;
+this.CARRY=0;
+
+return 4;
+
+
+/* JP */
+
+case 0xC3:
+
+this.pc=this.fetch16();
+
+return 16;
+
+case 0xC2:{
+
+const addr=this.fetch16();
+
+if(!this.Z){
+
+this.pc=addr;
+
+return 16;
+
+}
+
+return 12;
+
+}
+
+case 0xCA:{
+
+const addr=this.fetch16();
+
+if(this.Z){
+
+this.pc=addr;
+
+return 16;
+
+}
+
+return 12;
+
+}
+
+case 0xD2:{
+
+const addr=this.fetch16();
+
+if(!this.CARRY){
+
+this.pc=addr;
+
+return 16;
+
+}
+
+return 12;
+
+}
+
+case 0xDA:{
+
+const addr=this.fetch16();
+
+if(this.CARRY){
+
+this.pc=addr;
+
+return 16;
+
+}
+
+return 12;
+
+}
+
+case 0xE9:
+
+this.pc=this.hl;
+
+return 4;
+
+
+/* JR */
+
+case 0x18:{
+
+const off=this.fetch8();
+
+const signed=
+off<128?off:off-256;
+
+this.pc=
+(this.pc+signed)&0xFFFF;
+
+return 12;
+
+}
+
+case 0x20:{
+
+const off=this.fetch8();
+
+if(!this.Z){
+
+const signed=
+off<128?off:off-256;
+
+this.pc=
+(this.pc+signed)&0xFFFF;
+
+return 12;
+
+}
+
+return 8;
+
+}
+
+case 0x28:{
+
+const off=this.fetch8();
+
+if(this.Z){
+
+const signed=
+off<128?off:off-256;
+
+this.pc=
+(this.pc+signed)&0xFFFF;
+
+return 12;
+
+}
+
+return 8;
+
+}
+
+case 0x30:{
+
+const off=this.fetch8();
+
+if(!this.CARRY){
+
+const signed=
+off<128?off:off-256;
+
+this.pc=
+(this.pc+signed)&0xFFFF;
+
+return 12;
+
+}
+
+return 8;
+
+}
+
+case 0x38:{
+
+const off=this.fetch8();
+
+if(this.CARRY){
+
+const signed=
+off<128?off:off-256;
+
+this.pc=
+(this.pc+signed)&0xFFFF;
+
+return 12;
+
+}
+
+return 8;
+
+}
+
+
+/* CALL */
+
+case 0xCD:{
+
+const addr=this.fetch16();
+
+this.push16(this.pc);
+this.pc=addr;
+
+return 24;
+
+}
+
+case 0xC4:{
+
+const addr=this.fetch16();
+
+if(!this.Z){
+
+this.push16(this.pc);
+this.pc=addr;
+
+return 24;
+
+}
+
+return 12;
+
+}
+
+case 0xCC:{
+
+const addr=this.fetch16();
+
+if(this.Z){
+
+this.push16(this.pc);
+this.pc=addr;
+
+return 24;
+
+}
+
+return 12;
+
+}
+
+case 0xD4:{
+
+const addr=this.fetch16();
+
+if(!this.CARRY){
+
+this.push16(this.pc);
+this.pc=addr;
+
+return 24;
+
+}
+
+return 12;
+
+}
+
+case 0xDC:{
+
+const addr=this.fetch16();
+
+if(this.CARRY){
+
+this.push16(this.pc);
+this.pc=addr;
+
+return 24;
+
+}
+
+return 12;
+
+}
+
+
+/* RET */
+
+case 0xC9:
+
+this.pc=this.pop16();
+
+return 16;
+
+case 0xC0:
+
+if(!this.Z){
+
+this.pc=this.pop16();
+
+return 20;
+
+}
+
+return 8;
+
+case 0xC8:
+
+if(this.Z){
+
+this.pc=this.pop16();
+
+return 20;
+
+}
+
+return 8;
+
+case 0xD0:
+
+if(!this.CARRY){
+
+this.pc=this.pop16();
+
+return 20;
+
+}
+
+return 8;
+
+case 0xD8:
+
+if(this.CARRY){
+
+this.pc=this.pop16();
+
+return 20;
+
+}
+
+return 8;
+
+
+case 0xD9:
+
+this.pc=this.pop16();
+
+this.ime=true;
+
+return 16;
+
+
+/* PUSH */
+
+case 0xC5:
+this.push16(this.bc);
+return 16;
+
+case 0xD5:
+this.push16(this.de);
+return 16;
+
+case 0xE5:
+this.push16(this.hl);
+return 16;
+
+case 0xF5:
+this.push16(this.af);
+return 16;
+
+
+/* POP */
+
+case 0xC1:
+this.bc=this.pop16();
+return 12;
+
+case 0xD1:
+this.de=this.pop16();
+return 12;
+
+case 0xE1:
+this.hl=this.pop16();
+return 12;
+
+case 0xF1:
+this.af=this.pop16();
+return 12;
+
+
+/* DI */
+
+case 0xF3:
+
+this.ime=false;
+this.imeDelay=0;
+
+return 4;
+
+
+/* EI */
+
+case 0xFB:
+
+this.imeDelay=2;
+
+return 4;
+
+
+/* LD (nn),SP */
+
+case 0x08:{
+
+const addr=this.fetch16();
+
+this.write(
+addr,
+this.sp&0xFF
+);
+
+this.write(
+(addr+1)&0xFFFF,
+(this.sp>>8)&0xFF
+);
+
+return 20;
+
+}
+
+
+/* LD SP,HL */
+
+case 0xF9:
+
+this.sp=this.hl;
+
+return 8;
+
+
+/* ADD SP,e8 */
+
+case 0xE8:{
+
+const value=this.fetch8();
+
+const signed=
+value<128?value:value-256;
+
+const sp=this.sp;
+
+this.Z=0;
+this.N=0;
+
+this.H=
+((sp&15)+(value&15))>15;
+
+this.CARRY=
+((sp&255)+(value&255))>255;
+
+this.sp=
+(sp+signed)&0xFFFF;
+
+return 16;
+
+}
+
+
+/* LD HL,SP+e8 */
+
+case 0xF8:{
+
+const value=this.fetch8();
+
+const signed=
+value<128?value:value-256;
+
+const sp=this.sp;
+
+this.Z=0;
+this.N=0;
+
+this.H=
+((sp&15)+(value&15))>15;
+
+this.CARRY=
+((sp&255)+(value&255))>255;
+
+this.hl=
+(sp+signed)&0xFFFF;
+
+return 12;
+
+}
+
+
+/* LD (C),A */
+
+case 0xE2:
+
+this.write(
+0xFF00+this.c,
+this.a
+);
+
+return 8;
+
+
+/* LD A,(C) */
+
+case 0xF2:
+
+this.a=
+this.read(0xFF00+this.c);
+
+return 8;
+
+
+/* LDH */
+
+case 0xE0:{
+
+const n=this.fetch8();
+
+this.write(
+0xFF00+n,
+this.a
+);
+
+return 12;
+
+}
+
+case 0xF0:{
+
+const n=this.fetch8();
+
+this.a=
+this.read(0xFF00+n);
+
+return 12;
+
+}
+
+
+/* LD (nn),A */
+
+case 0xEA:{
+
+const addr=this.fetch16();
+
+this.write(
+addr,
+this.a
+);
+
+return 16;
+
+}
+
+
+/* LD A,(nn) */
+
+case 0xFA:{
+
+const addr=this.fetch16();
+
+this.a=
+this.read(addr);
+
+return 16;
+
+}
+
+
+/* HALT */
+
+case 0x76:
+
+this.halted=true;
+
+return 4;
+
+
+/* CB */
+
+case 0xCB:{
+
+const cb=this.fetch8();
+
+const r=cb&7;
+const group=cb>>6;
+const bit=(cb>>3)&7;
+
+let value=
+this.getR(r);
+
+
+if(group===0){
+
+const operation=
+(cb>>3)&7;
+
+let result=0;
+let carry=0;
+
+switch(operation){
+
+case 0:
+
+carry=(value&0x80)!==0;
+
+result=
+((value<<1)&0xFF)|
+(carry?1:0);
+
+break;
+
+case 1:
+
+carry=(value&1)!==0;
+
+result=
+(value>>1)|
+(carry?0x80:0);
+
+break;
+
+case 2:{
+
+const oldCarry=
+this.CARRY?1:0;
+
+carry=(value&0x80)!==0;
+
+result=
+((value<<1)&0xFF)|
+oldCarry;
+
+break;
+
+}
+
+case 3:{
+
+const oldCarry=
+this.CARRY?1:0;
+
+carry=(value&1)!==0;
+
+result=
+(value>>1)|
+(oldCarry?0x80:0);
+
+break;
+
+}
+
+case 4:
+
+carry=(value&0x80)!==0;
+
+result=
+(value<<1)&0xFF;
+
+break;
+
+case 5:
+
+carry=(value&1)!==0;
+
+result=
+(value>>1)|
+(value&0x80);
+
+break;
+
+case 6:
+
+result=
+((value&0x0F)<<4)|
+((value&0xF0)>>4);
+
+carry=0;
+
+break;
+
+case 7:
+
+carry=(value&1)!==0;
+
+result=value>>1;
+
+break;
+
+}
+
+this.setR(r,result);
+
+this.Z=result===0;
+this.N=0;
+this.H=0;
+this.CARRY=carry;
+
+return r===6?16:8;
+
+}
+
+
+if(group===1){
+
+this.Z=
+(value&(1<<bit))===0;
+
+this.N=0;
+this.H=1;
+
+return r===6?12:8;
+
+}
+
+
+if(group===2){
+
+value&=
+~(1<<bit);
+
+this.setR(r,value);
+
+return r===6?16:8;
+
+}
+
+
+if(group===3){
+
+value|=
+(1<<bit);
+
+this.setR(r,value);
+
+return r===6?16:8;
+
+}
+
+return 8;
+
+}
+
+
+/* RST */
+
+case 0xC7:
+
+this.push16(this.pc);
+this.pc=0x00;
+
+return 16;
+
+case 0xCF:
+
+this.push16(this.pc);
+this.pc=0x08;
+
+return 16;
+
+case 0xD7:
+
+this.push16(this.pc);
+this.pc=0x10;
+
+return 16;
+
+case 0xDF:
+
+this.push16(this.pc);
+this.pc=0x18;
+
+return 16;
+
+case 0xE7:
+
+this.push16(this.pc);
+this.pc=0x20;
+
+return 16;
+
+case 0xEF:
+
+this.push16(this.pc);
+this.pc=0x28;
+
+return 16;
+
+case 0xF7:
+
+this.push16(this.pc);
+this.pc=0x30;
+
+return 16;
+
+case 0xFF:
+
+this.push16(this.pc);
+this.pc=0x38;
+
+return 16;
+
+
+/* Illegal */
+
+case 0xD3:
+case 0xDB:
+case 0xDD:
+case 0xE3:
+case 0xE4:
+case 0xEB:
+case 0xEC:
+case 0xED:
+case 0xF4:
+case 0xFC:
+case 0xFD:
+
+return 4;
+
+
+default:
+
+console.warn(
+"Unknown Game Boy opcode 0x"+
+op.toString(16).padStart(2,"0")+
+" at 0x"+
+((this.pc-1)&0xFFFF)
+.toString(16).padStart(4,"0")
+);
+
+return 4;
+
+}
+
+}
+finally{
+
+if(this.imeDelay){
+
+this.imeDelay--;
+
+if(this.imeDelay===0)
+this.ime=true;
+
+}
+
+}
+
+}
+
+}
+
+
+/* =========================================================
+   CPU INSTANCE
+========================================================= */
+
+const gbCPU=
+new GBCPU();
+
+
+/* =========================================================
+   GB RESET
+========================================================= */
+
+function gbReset(){
+
+gbHardwareReset();
+
+gbCartridge.romBank=1;
+gbCartridge.ramBank=0;
+gbCartridge.ramEnabled=false;
+gbCartridge.bankingMode=0;
+
+gbCPU.reset();
+
+}
+
+
+/* =========================================================
+   STAT
+========================================================= */
+
+function gbUpdateSTAT(){
+
+if(!(gbPPU.lcdc&0x80)){
+
+gbPPU.mode=0;
+
+}
+else{
+
+if(gbPPU.ly>=144)
+gbPPU.mode=1;
+
+else if(gbPPU.cycles<80)
+gbPPU.mode=2;
+
+else if(gbPPU.cycles<252)
+gbPPU.mode=3;
+
+else
+gbPPU.mode=0;
+
+}
+
+
+let stat=
+gbPPU.stat&0x78;
+
+stat|=
+gbPPU.mode;
+
+const coincidence=
+gbPPU.ly===gbPPU.lyc;
+
+if(coincidence)
+stat|=0x04;
+
+
+let statIRQ=false;
+
+if(
+(coincidence&&(gbPPU.stat&0x40)) ||
+(gbPPU.mode===2&&(gbPPU.stat&0x20)) ||
+(gbPPU.mode===1&&(gbPPU.stat&0x10)) ||
+(gbPPU.mode===0&&(gbPPU.stat&0x08))
+){
+
+statIRQ=true;
+
+}
+
+
+if(
+statIRQ &&
+!gbPPU.statIRQLine
+){
+
+gbMemory[0xFF0F]|=0x02;
+
+}
+
+gbPPU.statIRQLine=statIRQ;
+
+gbPPU.stat=
+stat|0x80;
+
+}
+
+
+/* =========================================================
+   PPU STEP
+========================================================= */
+
+function gbPPUStep(cycles){
+
+if(!(gbPPU.lcdc&0x80))
+return;
+
+gbPPU.cycles+=cycles;
+
+while(gbPPU.cycles>=456){
+
+gbPPU.cycles-=456;
+
+gbPPU.ly++;
+
+if(gbPPU.ly===144)
+gbMemory[0xFF0F]|=0x01;
+
+if(gbPPU.ly<144){
+
+gbPPU.lineSCX[gbPPU.ly]=gbPPU.scx;
+gbPPU.lineSCY[gbPPU.ly]=gbPPU.scy;
+
+}
+
+if(gbPPU.ly>=154){
+
+gbPPU.ly=0;
+
+gbPPU.lineSCX[0]=gbPPU.scx;
+gbPPU.lineSCY[0]=gbPPU.scy;
+
+}
+
+}
+
+gbUpdateSTAT();
+
+}
+
+
+/* =========================================================
+   FAST TILE ACCESS
+========================================================= */
+
+function gbGetTileIndex(tileIndex,signedMode){
+
+if(!signedMode)
+return tileIndex;
+
+const signed=
+tileIndex<128
+?
+tileIndex
+:
+tileIndex-256;
+
+return 256+signed;
+
+}
+
+
+function gbGetTilePixel(tile,row,col){
+
+gbDecodeTile(tile);
+
+return gbTileCache[
+tile*64+
+row*8+
+col
+];
+
+}
+
+
+/* =========================================================
+   FAST PPU DRAW
+========================================================= */
+
+function gbPPUDrawBackground(){
+
+const image=
+gbImage.data;
+
+const bg=
+gbBGColorIndex;
+
+const lcdc=
+gbPPU.lcdc;
+
+const bgp=
+gbPPU.bgp;
+
+const signedMode=
+!(lcdc&0x10);
+
+const bgMapBase=
+(lcdc&0x08)
+?
+0x9C00
+:
+0x9800;
+
+
+/* BACKGROUND */
+
+for(let y=0;y<144;y++){
+
+const scx=
+gbPPU.lineSCX[y];
+
+const scy=
+gbPPU.lineSCY[y];
+
+const worldY=
+(y+scy)&255;
+
+const tileY=
+worldY>>3;
+
+const row=
+worldY&7;
+
+const mapRow=
+tileY*32;
+
+const basePixel=
+y*160;
+
+for(let screenX=0;screenX<160;screenX++){
+
+const worldX=
+(screenX+scx)&255;
+
+const tileX=
+worldX>>3;
+
+const tileIndex=
+gbVRAM[
+(bgMapBase-0x8000)+
+mapRow+
+tileX
+];
+
+const tile=
+gbGetTileIndex(
+tileIndex,
+signedMode
+);
+
+const color=
+gbGetTilePixel(
+tile,
+row,
+worldX&7
+);
+
+const pixel=
+basePixel+screenX;
+
+bg[pixel]=color;
+
+const shade=
+gbShadeTable[
+bgp*4+color
+];
+
+const i=
+pixel*4;
+
+image[i]=shade;
+image[i+1]=shade;
+image[i+2]=shade;
+image[i+3]=255;
+
+}
+
+}
+
+
+/* WINDOW */
+
+if(lcdc&0x20){
+
+const wy=gbPPU.wy;
+const wx=gbPPU.wx-7;
+
+if(wy<144){
+
+const windowMap=
+(lcdc&0x40)
+?
+0x9C00
+:
+0x9800;
+
+for(let y=Math.max(0,wy);y<144;y++){
+
+const windowY=
+y-wy;
+
+const tileY=
+windowY>>3;
+
+const row=
+windowY&7;
+
+for(
+let screenX=Math.max(0,wx);
+screenX<160;
+screenX++
+){
+
+const windowX=
+screenX-wx;
+
+if(windowX<0)
+continue;
+
+const tileX=
+windowX>>3;
+
+if(tileX>=32)
+continue;
+
+const tileIndex=
+gbVRAM[
+(windowMap-0x8000)+
+tileY*32+
+tileX
+];
+
+const tile=
+gbGetTileIndex(
+tileIndex,
+signedMode
+);
+
+const color=
+gbGetTilePixel(
+tile,
+row,
+windowX&7
+);
+
+const pixel=
+y*160+screenX;
+
+bg[pixel]=color;
+
+const shade=
+gbShadeTable[
+bgp*4+color
+];
+
+const i=
+pixel*4;
+
+image[i]=shade;
+image[i+1]=shade;
+image[i+2]=shade;
+image[i+3]=255;
+
+}
+
+}
+
+}
+
+}
+
+
+/* SPRITES */
+
+if(lcdc&0x02){
+
+const spriteHeight=
+(lcdc&0x04)
+?
+16
+:
+8;
+
+for(let sprite=0;sprite<40;sprite++){
+
+const base=sprite*4;
+
+const sy=
+gbOAM[base]-16;
+
+const sx=
+gbOAM[base+1]-8;
+
+let tile=
+gbOAM[base+2];
+
+const flags=
+gbOAM[base+3];
+
+const flipX=
+!!(flags&0x20);
+
+const flipY=
+!!(flags&0x40);
+
+const behindBG=
+!!(flags&0x80);
+
+const spritePalette=
+(flags&0x10)
+?
+gbPPU.obp1
+:
+gbPPU.obp0;
+
+if(spriteHeight===16)
+tile&=0xFE;
+
+
+for(let py=0;py<spriteHeight;py++){
+
+let actualY=
+flipY
+?
+spriteHeight-1-py
+:
+py;
+
+let tileNumber=tile;
+
+if(spriteHeight===16){
+
+if(actualY>=8){
+
+tileNumber=
+tile+1;
+
+actualY-=8;
+
+}
+
+}
+
+
+for(let px=0;px<8;px++){
+
+const actualX=
+flipX
+?
+7-px
+:
+px;
+
+const color=
+gbGetTilePixel(
+tileNumber,
+actualY,
+actualX
+);
+
+if(color===0)
+continue;
+
+const screenX=
+sx+px;
+
+const screenY=
+sy+py;
+
+if(
+screenX<0 ||
+screenX>=160 ||
+screenY<0 ||
+screenY>=144
+)
+continue;
+
+if(
+behindBG &&
+bg[
+screenY*160+screenX
+]!==0
+)
+continue;
+
+const shade=
+gbShadeTable[
+spritePalette*4+color
+];
+
+const i=
+(screenY*160+screenX)*4;
+
+image[i]=shade;
+image[i+1]=shade;
+image[i+2]=shade;
+image[i+3]=255;
+
+}
+
+}
+
+}
+
+}
+
+
+gbCtx.putImageData(
+gbImage,
+0,
+0
+);
+
+}
+
+
+/* =========================================================
+   TIMER
+========================================================= */
+
+function gbTimerStep(cycles){
+
+gbTimer.div=
+(gbTimer.div+cycles)&0xFFFF;
+
+if(!(gbTimer.tac&0x04))
+return;
+
+gbTimer.counter+=cycles;
+
+const frequencies=[
+1024,
+16,
+64,
+256
+];
+
+const threshold=
+frequencies[
+gbTimer.tac&3
+];
+
+while(
+gbTimer.counter>=threshold
+){
+
+gbTimer.counter-=threshold;
+
+if(gbTimer.tima===0xFF){
+
+gbTimer.tima=
+gbTimer.tma;
+
+gbMemory[0xFF0F]|=0x04;
+
+}
+else{
+
+gbTimer.tima=
+(gbTimer.tima+1)&0xFF;
+
+}
+
+}
+
+}
+
+
+/* =========================================================
+   GAME BOY FRAME
+========================================================= */
+
+const GB_CYCLES_PER_FRAME=70224;
+
+function gbRunFrame(){
+
+if(!gbROMLoaded)
+return;
+
+let cycles=0;
+
+while(
+cycles<GB_CYCLES_PER_FRAME
+){
+
+const used=
+gbCPU.step();
+
+const actual=
+used>0
+?
+used
+:
+4;
+
+gbTimerStep(actual);
+gbPPUStep(actual);
+
+cycles+=actual;
+
+}
+
+gbPPUDrawBackground();
+
+}
+
+
+/* =========================================================
+   GAME BOY AUDIO ENGINE
+========================================================= */
+
+/*
+   Improved lightweight Game Boy DMG audio engine.
+
+   CH1 = Square + sweep + envelope
+   CH2 = Square + envelope
+   CH3 = Wave RAM
+   CH4 = LFSR noise + envelope
+
+   No external core.
+   No WASM.
+   No external dependency.
+
+   The emulator CPU / PPU / input system remains unchanged.
+*/
+
+const GBAudio={
+
+ctx:null,
+node:null,
+enabled:false,
+
+sampleRate:44100,
+
+/* Persistent output filter state */
+dcLeft:0,
+dcRight:0,
+
+filterLeft:0,
+filterRight:0,
+
+/* Envelope state */
+envelopeVolume:[0,0,0,0],
+envelopeTimer:[0,0,0,0],
+envelopeLastReg:[0,0,0,0],
+
+/* CH1 sweep state */
+sweepTimer:0,
+sweepFrequency:0,
+sweepEnabled:false,
+sweepLastReg:0,
+
+/* Audio timing */
+audioTime:0,
+
+/* =========================================================
+   AUDIO START
+========================================================= */
+
+start(){
+
+if(this.enabled)
+return;
+
+try{
+
+this.ctx=
+new(
+window.AudioContext||
+window.webkitAudioContext
+)();
+
+this.sampleRate=
+this.ctx.sampleRate||44100;
+
+
+/*
+   Smaller callback than before.
+
+   This is especially useful for short Game Boy effects
+   because the audio system gets serviced more frequently.
+*/
+
+this.node=
+this.ctx.createScriptProcessor(
+1024,
+0,
+2
+);
+
+
+/* Reset output state */
+
+this.dcLeft=0;
+this.dcRight=0;
+
+this.filterLeft=0;
+this.filterRight=0;
+
+this.audioTime=0;
+
+
+/* Synchronize with current GB registers */
+
+this.syncState();
+
+
+this.node.onaudioprocess=e=>{
+
+const left=
+e.outputBuffer.getChannelData(0);
+
+const right=
+e.outputBuffer.getChannelData(1);
+
+
+for(
+let i=0;
+i<left.length;
+i++
+){
+
+const stereo=
+this.sample();
+
+
+/*
+   Stronger level than the previous version.
+
+   Short effects should remain audible.
+*/
+
+let l=
+stereo.left*0.27;
+
+let r=
+stereo.right*0.27;
+
+
+/*
+   Gentle Game Boy-style high-pass / DC removal.
+
+   This is intentionally very light.
+*/
+
+const dcAmount=0.996;
+
+this.dcLeft=
+this.dcLeft*dcAmount+l;
+
+l-=
+this.dcLeft*0.004;
+
+
+this.dcRight=
+this.dcRight*dcAmount+r;
+
+r-=
+this.dcRight*0.004;
+
+
+/*
+   Very light smoothing.
+
+   The previous engine filtered too much of the
+   high-frequency content from short effects.
+*/
+
+this.filterLeft+=
+(l-this.filterLeft)*0.55;
+
+this.filterRight+=
+(r-this.filterRight)*0.55;
+
+
+/*
+   Very soft saturation.
+
+   Only protects against occasional peaks.
+*/
+
+l=
+Math.tanh(
+this.filterLeft*1.05
+);
+
+r=
+Math.tanh(
+this.filterRight*1.05
+);
+
+
+left[i]=l;
+right[i]=r;
+
+}
+
+};
+
+
+this.node.connect(
+this.ctx.destination
+);
+
+this.enabled=true;
+
+
+if(
+this.ctx.state==="suspended"
+){
+
+this.ctx.resume();
+
+}
+
+}
+catch(e){
+
+console.error(
+"Game Boy audio failed:",
+e
+);
+
+}
+
+},
+
+
+/* =========================================================
+   SYNCHRONIZE AUDIO STATE
+========================================================= */
+
+syncState(){
+
+for(
+let ch=0;
+ch<4;
+ch++
+){
+
+this.envelopeVolume[ch]=
+this.getInitialVolume(ch);
+
+this.envelopeTimer[ch]=0;
+
+this.envelopeLastReg[ch]=
+this.getEnvelopeReg(ch);
+
+}
+
+
+this.sweepTimer=0;
+
+this.sweepFrequency=
+this.getFrequency(0);
+
+this.sweepEnabled=false;
+
+this.sweepLastReg=
+gbMemory[0xFF10];
+
+},
+
+
+/* =========================================================
+   AUDIO STOP
+========================================================= */
+
+stop(){
+
+this.enabled=false;
+
+
+if(this.node){
+
+try{
+
+this.node.disconnect();
+
+}
+catch(e){}
+
+this.node=null;
+
+}
+
+
+if(this.ctx){
+
+try{
+
+this.ctx.close();
+
+}
+catch(e){}
+
+this.ctx=null;
+
+}
+
+},
+
+
+/* =========================================================
+   REGISTER HELPERS
+========================================================= */
+
+getEnvelopeReg(channel){
+
+if(channel===0)
+return gbMemory[0xFF12];
+
+if(channel===1)
+return gbMemory[0xFF17];
+
+return gbMemory[0xFF21];
+
+},
+
+
+getInitialVolume(channel){
+
+const reg=
+this.getEnvelopeReg(channel);
+
+return(
+reg>>4
+)&15;
+
+},
+
+
+getFrequency(channel){
+
+let low;
+let high;
+
+
+if(channel===0){
+
+low=0xFF13;
+high=0xFF14;
+
+}
+else
+if(channel===1){
+
+low=0xFF18;
+high=0xFF19;
+
+}
+else{
+
+return 0;
+
+}
+
+
+return(
+gbMemory[low]|
+(
+(gbMemory[high]&7)<<8
+)
+);
+
+},
+
+
+/* =========================================================
+   ENVELOPE
+========================================================= */
+
+updateEnvelope(channel){
+
+const reg=
+this.getEnvelopeReg(channel);
+
+const initial=
+(reg>>4)&15;
+
+const direction=
+(reg&8)
+?
+1
+:
+-1;
+
+const period=
+reg&7;
+
+
+/*
+   Period 0 = no envelope movement.
+*/
+
+if(period===0){
+
+this.envelopeVolume[channel]=
+initial;
+
+this.envelopeTimer[channel]=0;
+
+this.envelopeLastReg[channel]=
+reg;
+
+return;
+
+}
+
+
+/*
+   Detect a register change.
+
+   Do not unnecessarily destroy the current volume.
+*/
+
+if(
+this.envelopeLastReg[channel]!==reg
+){
+
+this.envelopeLastReg[channel]=
+reg;
+
+if(
+this.envelopeVolume[channel]<0 ||
+this.envelopeVolume[channel]>15
+){
+
+this.envelopeVolume[channel]=
+initial;
+
+}
+
+}
+
+
+/*
+   Real Game Boy envelope rate:
+   64 Hz / period.
+
+   We advance using real audio sample time.
+*/
+
+const secondsPerStep=
+period/64;
+
+this.envelopeTimer[channel]+=
+1/this.sampleRate;
+
+
+while(
+this.envelopeTimer[channel]>=
+secondsPerStep
+){
+
+this.envelopeTimer[channel]-=
+secondsPerStep;
+
+let v=
+this.envelopeVolume[channel];
+
+v+=direction;
+
+if(v<0)
+v=0;
+
+if(v>15)
+v=15;
+
+this.envelopeVolume[channel]=v;
+
+}
+
+},
+
+
+/* =========================================================
+   DUTY TABLE
+========================================================= */
+
+dutyTable:[
+
+/* 12.5% */
+[
+1,0,0,0,
+0,0,0,0
+],
+
+/* 25% */
+[
+1,1,0,0,
+0,0,0,0
+],
+
+/* 50% */
+[
+1,1,1,1,
+0,0,0,0
+],
+
+/* 75% */
+[
+0,0,0,0,
+1,1,1,1
+]
+
+],
+
+
+/* =========================================================
+   GAME BOY SQUARE CHANNEL 2
+========================================================= */
+
+square(channel){
+
+const dutyReg=
+channel===0
+?
+0xFF11
+:
+0xFF16;
+
+const period=
+this.getFrequency(channel);
+
+
+if(
+period>=2048
+)
+return 0;
+
+
+const frequency=
+131072/
+(
+2048-period
+);
+
+
+if(
+frequency<=0 ||
+frequency>20000
+)
+return 0;
+
+
+/* Envelope */
+
+this.updateEnvelope(channel);
+
+
+const volume=
+this.envelopeVolume[channel];
+
+
+if(volume<=0)
+return 0;
+
+
+const duty=
+(
+gbMemory[dutyReg]>>6
+)&3;
+
+
+const phase=
+gbAPU.phase[channel];
+
+
+gbAPU.phase[channel]+=
+frequency/
+this.sampleRate;
+
+
+while(
+gbAPU.phase[channel]>=1
+){
+
+gbAPU.phase[channel]-=1;
+
+}
+
+
+const step=
+Math.floor(
+phase*8
+)&7;
+
+
+const high=
+this.dutyTable[duty][step];
+
+
+return(
+high
+?
+0.95
+:
+-0.95
+)*
+(volume/15);
+
+},
+
+
+/* =========================================================
+   GAME BOY WAVE CHANNEL 3
+========================================================= */
+
+wave(){
+
+const nr30=
+gbMemory[0xFF1A];
+
+
+/* DAC disabled */
+
+if(!(nr30&0x80))
+return 0;
+
+
+const period=
+gbMemory[0xFF1D]|
+(
+(gbMemory[0xFF1E]&7)<<8
+);
+
+
+if(
+period>=2048
+)
+return 0;
+
+
+const level=
+(
+gbMemory[0xFF1C]>>5
+)&3;
+
+
+if(level===0)
+return 0;
+
+
+const frequency=
+65536/
+(
+2048-period
+);
+
+
+const phase=
+gbAPU.phase[2];
+
+
+gbAPU.phase[2]+=
+frequency/
+this.sampleRate;
+
+
+while(
+gbAPU.phase[2]>=1
+){
+
+gbAPU.phase[2]-=1;
+
+}
+
+
+const sampleIndex=
+Math.floor(
+phase*32
+)&31;
+
+
+const byte=
+gbMemory[
+0xFF30+
+(sampleIndex>>1)
+];
+
+
+let value;
+
+
+if(
+sampleIndex&1
+){
+
+value=
+byte&0x0F;
+
+}
+else{
+
+value=
+byte>>4;
+
+}
+
+
+let out=
+(value-7.5)/7.5;
+
+
+/*
+   NR32 volume:
+   00 = mute
+   01 = 100%
+   10 = 50%
+   11 = 25%
+*/
+
+if(level===2)
+out*=0.50;
+
+else
+if(level===3)
+out*=0.25;
+
+
+return out*0.95;
+
+},
+
+
+/* =========================================================
+   GAME BOY NOISE CHANNEL 4
+========================================================= */
+
+noise(){
+
+const volumeReg=
+gbMemory[0xFF21];
+
+const nr43=
+gbMemory[0xFF22];
+
+const initial=
+(volumeReg>>4)&15;
+
+
+if(initial===0)
+return 0;
+
+
+/* Envelope */
+
+this.updateEnvelope(3);
+
+
+const volume=
+this.envelopeVolume[3];
+
+
+if(volume<=0)
+return 0;
+
+
+/*
+   NR43:
+   bits 4-7 = clock shift
+   bit 3    = 7/15 bit mode
+   bits 0-2 = divisor
+*/
+
+const shift=
+(nr43>>4)&15;
+
+
+/*
+   Extremely high shift values produce no useful
+   audible noise in this lightweight implementation.
+*/
+
+if(shift>=14)
+return 0;
+
+
+const dividerCode=
+nr43&7;
+
+
+const divisors=[
+8,
+16,
+32,
+48,
+64,
+80,
+96,
+112
+];
+
+
+const divisor=
+divisors[dividerCode];
+
+
+const frequency=
+262144/
+(
+divisor*
+Math.pow(2,shift)
+);
+
+
+if(frequency<=0)
+return 0;
+
+
+/* Advance LFSR */
+
+gbAPU.noisePhase+=
+frequency/
+this.sampleRate;
+
+
+while(
+gbAPU.noisePhase>=1
+){
+
+gbAPU.noisePhase-=1;
+
+
+const bit=
+(
+gbAPU.noiseLFSR^
+(gbAPU.noiseLFSR>>1)
+)&1;
+
+
+gbAPU.noiseLFSR=
+(
+gbAPU.noiseLFSR>>1
+)|
+(bit<<14);
+
+
+/*
+   7-bit mode.
+*/
+
+if(nr43&8){
+
+gbAPU.noiseLFSR=
+(
+gbAPU.noiseLFSR&~0x40
+)|
+(bit<<6);
+
+}
+
+}
+
+
+const output=
+(
+gbAPU.noiseLFSR&1
+)
+?
+-1
+:
+1;
+
+
+return(
+output*
+0.95*
+(volume/15)
+);
+
+},
+
+
+/* =========================================================
+   CH1 SWEEP
+========================================================= */
+
+getSweepFrequency(){
+
+let frequency=
+this.sweepFrequency;
+
+
+if(
+frequency<=0 ||
+frequency>=2048
+){
+
+frequency=
+this.getFrequency(0);
+
+}
+
+
+return frequency;
+
+},
+
+
+updateSweep(){
+
+const nr10=
+gbMemory[0xFF10];
+
+
+const period=
+(nr10>>4)&7;
+
+
+const direction=
+(nr10&8)
+?
+-1
+:
+1;
+
+
+const shift=
+nr10&7;
+
+
+/*
+   Sweep period 0 is treated as an 8-step period
+   by real Game Boy hardware.
+
+   This gives short effects a much more natural sweep.
+*/
+
+const effectivePeriod=
+period===0
+?
+8
+:
+period;
+
+
+if(shift===0){
+
+this.sweepTimer+=
+1/this.sampleRate;
+
+if(
+this.sweepTimer>=
+effectivePeriod/128
+){
+
+this.sweepTimer=0;
+
+}
+
+return;
+
+}
+
+
+this.sweepTimer+=
+1/this.sampleRate;
+
+
+if(
+this.sweepTimer<
+effectivePeriod/128
+)
+return;
+
+
+this.sweepTimer-=
+effectivePeriod/128;
+
+
+let frequency=
+this.getSweepFrequency();
+
+
+const delta=
+frequency>>shift;
+
+
+frequency+=
+delta*direction;
+
+
+/*
+   Hardware overflow disables CH1.
+*/
+
+if(
+frequency>=2048 ||
+frequency<0
+){
+
+gbAPU.active[0]=0;
+
+return;
+
+}
+
+
+this.sweepFrequency=
+frequency;
+
+},
+
+
+/* =========================================================
+   CH1 WITH SWEEP
+========================================================= */
+
+square1(){
+
+this.updateSweep();
+
+
+let frequency=
+this.getSweepFrequency();
+
+
+if(
+frequency>=2048 ||
+frequency<=0
+)
+return 0;
+
+
+this.updateEnvelope(0);
+
+
+const volume=
+this.envelopeVolume[0];
+
+
+if(volume<=0)
+return 0;
+
+
+const duty=
+(
+gbMemory[0xFF11]>>6
+)&3;
+
+
+const phase=
+gbAPU.phase[0];
+
+
+const hz=
+131072/
+(
+2048-frequency
+);
+
+
+gbAPU.phase[0]+=
+hz/
+this.sampleRate;
+
+
+while(
+gbAPU.phase[0]>=1
+){
+
+gbAPU.phase[0]-=1;
+
+}
+
+
+const step=
+Math.floor(
+phase*8
+)&7;
+
+
+const value=
+this.dutyTable[duty][step]
+?
+0.95
+:
+-0.95;
+
+
+return value*
+(volume/15);
+
+},
+
+
+/* =========================================================
+   MIXER
+========================================================= */
+
+sample(){
+
+if(!sound){
+
+return{
+left:0,
+right:0
+};
+
+}
+
+
+/*
+   NR52 master power.
+*/
+
+if(
+!(gbMemory[0xFF26]&0x80)
+){
+
+return{
+left:0,
+right:0
+};
+
+}
+
+
+/* CH1 */
+
+let ch1=0;
+
+if(
+gbAPU.active[0] &&
+(gbMemory[0xFF12]&0xF8)
+){
+
+ch1=
+this.square1();
+
+}
+
+
+/* CH2 */
+
+let ch2=0;
+
+if(
+gbAPU.active[1] &&
+(gbMemory[0xFF17]&0xF8)
+){
+
+ch2=
+this.square(1);
+
+}
+
+
+/* CH3 */
+
+let ch3=0;
+
+if(
+gbAPU.active[2] &&
+(gbMemory[0xFF1A]&0x80)
+){
+
+ch3=
+this.wave();
+
+}
+
+
+/* CH4 */
+
+let ch4=0;
+
+if(
+gbAPU.active[3] &&
+(gbMemory[0xFF21]&0xF8)
+){
+
+ch4=
+this.noise();
+
+}
+
+
+const channels=[
+ch1,
+ch2,
+ch3,
+ch4
+];
+
+
+/*
+   NR51 stereo routing.
+*/
+
+const nr51=
+gbMemory[0xFF25];
+
+let left=0;
+let right=0;
+
+
+if(nr51&0x10)
+left+=ch1;
+
+if(nr51&0x01)
+right+=ch1;
+
+
+if(nr51&0x20)
+left+=ch2;
+
+if(nr51&0x02)
+right+=ch2;
+
+
+if(nr51&0x40)
+left+=ch3;
+
+if(nr51&0x04)
+right+=ch3;
+
+
+if(nr51&0x80)
+left+=ch4;
+
+if(nr51&0x08)
+right+=ch4;
+
+
+/*
+   Safe mono fallback.
+*/
+
+if(nr51===0){
+
+left=
+(
+ch1+
+ch2+
+ch3+
+ch4
+)/4;
+
+right=
+left;
+
+}
+
+
+/*
+   NR50 master volume.
+
+   Do NOT normalize by active channel count.
+
+   That normalization was one of the things that made
+   short effects disappear or become unnaturally quiet.
+*/
+
+const nr50=
+gbMemory[0xFF24];
+
+
+const leftVolume=
+((nr50>>4)&7)+1;
+
+
+const rightVolume=
+(nr50&7)+1;
+
+
+left=
+(
+left*
+leftVolume
+)/8;
+
+
+right=
+(
+right*
+rightVolume
+)/8;
+
+
+/*
+   Very small stereo separation.
+
+   Keep the original Game Boy character.
+*/
+
+const mid=
+(left+right)*0.5;
+
+const side=
+(left-right)*0.10;
+
+
+left=
+mid+side;
+
+right=
+mid-side;
+
+
+return{
+left,
+right
+};
+
+}
+
+};
+
+
+/* =========================================================
+   AUDIO TRIGGER SYNCHRONIZATION
+========================================================= */
+
+/*
+   The CPU can write several APU trigger registers while the
+   JavaScript audio callback is busy.
+
+   We therefore make sure every trigger immediately resets
+   the corresponding oscillator state.
+
+   This wrapper stays completely inside the audio section,
+   so no other emulator code has to be changed.
+*/
+
+const gbOriginalAPUWrite=
+gbAPUWrite;
+
+
+gbAPUWrite=function(addr,value){
+
+gbOriginalAPUWrite(
+addr,
+value
+);
+
+
+/* CH1 */
+
+if(
+addr===0xFF14 &&
+(value&0x80)
+){
+
+if(
+gbMemory[0xFF12]&0xF8
+){
+
+gbAPU.active[0]=1;
+
+gbAPU.phase[0]=0;
+
+
+GBAudio.envelopeVolume[0]=
+(
+gbMemory[0xFF12]>>4
+)&15;
+
+GBAudio.envelopeTimer[0]=0;
+
+GBAudio.envelopeLastReg[0]=
+gbMemory[0xFF12];
+
+
+GBAudio.sweepFrequency=
+gbMemory[0xFF13]|
+(
+(gbMemory[0xFF14]&7)<<8
+);
+
+GBAudio.sweepTimer=0;
+
+GBAudio.sweepEnabled=
+(
+(gbMemory[0xFF10]>>4)&7
+)!==0;
+
+GBAudio.sweepLastReg=
+gbMemory[0xFF10];
+
+}
+
+}
+
+
+/* CH2 */
+
+if(
+addr===0xFF19 &&
+(value&0x80)
+){
+
+if(
+gbMemory[0xFF17]&0xF8
+){
+
+gbAPU.active[1]=1;
+
+gbAPU.phase[1]=0;
+
+
+GBAudio.envelopeVolume[1]=
+(
+gbMemory[0xFF17]>>4
+)&15;
+
+GBAudio.envelopeTimer[1]=0;
+
+GBAudio.envelopeLastReg[1]=
+gbMemory[0xFF17];
+
+}
+
+}
+
+
+/* CH3 */
+
+if(
+addr===0xFF1E &&
+(value&0x80)
+){
+
+if(
+gbMemory[0xFF1A]&0x80
+){
+
+gbAPU.active[2]=1;
+
+gbAPU.phase[2]=0;
+
+}
+
+}
+
+
+/* CH4 */
+
+if(
+addr===0xFF23 &&
+(value&0x80)
+){
+
+if(
+gbMemory[0xFF21]&0xF8
+){
+
+gbAPU.active[3]=1;
+
+gbAPU.noisePhase=0;
+
+gbAPU.noiseLFSR=0x7FFF;
+
+
+GBAudio.envelopeVolume[3]=
+(
+gbMemory[0xFF21]>>4
+)&15;
+
+GBAudio.envelopeTimer[3]=0;
+
+GBAudio.envelopeLastReg[3]=
+gbMemory[0xFF21];
+
+}
+
+}
+
+};
+
+
+/* =========================================================
+   END GAME BOY AUDIO ENGINE
+========================================================= */
+/* =========================================================
+   ROM LOADING
+========================================================= */
+
+const GB_DEFAULT_ROM=
+"roms/Super Mario Land.gb";
+
+let GB_ROM_LIST=[];
+
+let gbROM=null;
+let gbROMLoaded=false;
+
+
+function gbPrepareCartridge(){
+
+gbCartridge.rom=
+gbROM;
+
+gbCartridge.romSize=
+gbROM.length;
+
+gbCartridge.romBank=1;
+gbCartridge.ramBank=0;
+gbCartridge.ramEnabled=false;
+gbCartridge.bankingMode=0;
+
+gbDetectCartridge();
+
+gbHardwareReset();
+
+gbCPU.reset();
+
+gbROMLoaded=true;
+
+}
+
+
+async function loadGBROM(path){
+
+if(!path)
+return;
+
+pause=1;
+
+gbROMLoaded=false;
+
+try{
+
+const response=
+await fetch(
+path,
+{
+cache:"no-store"
+}
+);
+
+if(!response.ok){
+
+throw new Error(
+"HTTP "+response.status
+);
+
+}
+
+const buffer=
+await response.arrayBuffer();
+
+gbROM=
+new Uint8Array(buffer);
+
+gbPrepareCartridge();
+
+reset();
+
+gbCPU.reset();
+
+pause=0;
+
+console.log(
+"Game Boy ROM loaded:",
+path
+);
+
+console.log(
+"ROM size:",
+gbROM.length,
+"bytes"
+);
+
+console.log(
+"Entry opcode:",
+"0x"+
+gbRead(0x0100)
+.toString(16)
+.padStart(2,"0")
+);
+
+}
+catch(e){
+
+gbROMLoaded=false;
+pause=1;
+
+console.error(
+"Game Boy ROM loading failed:",
+e
+);
+
+alert(
+"Could not load ROM:\n"+
+path
+);
+
+}
+
+}
+
+
+/* =========================================================
+   ROM HEADER
+========================================================= */
+
+function gbDetectCartridge(){
+
+if(!gbCartridge.rom)
+return;
+
+gbCartridge.mbcType=
+gbCartridge.rom[0x0147]||0;
+
+const romSizeCode=
+gbCartridge.rom[0x0148]||0;
+
+if(romSizeCode<=8){
+
+gbCartridge.romSize=
+32768*
+(1<<romSizeCode);
+
+}
+else{
+
+gbCartridge.romSize=
+gbCartridge.rom.length;
+
+}
+
+console.log(
+"Game Boy cartridge type:",
+"0x"+
+gbCartridge.mbcType
+.toString(16)
+.padStart(2,"0")
+);
+
+}
+
+
+/* =========================================================
+   ROM SELECTOR
+========================================================= */
+
+const romSelect=
+document.getElementById(
+"romSelect"
+);
+
+
+function gbRomDisplayName(path){
+
+let name=
+path.split("/").pop();
+
+try{
+
+name=
+decodeURIComponent(name);
+
+}
+catch(e){}
+
+return name;
+
+}
+
+
+function loadGBROMFile(file){
+
+if(!file)
+return;
+
+pause=1;
+gbROMLoaded=false;
+
+try{
+
+const reader=new FileReader();
+
+reader.onload=function(){
+
+try{
+
+gbROM=
+new Uint8Array(
+reader.result
+);
+
+gbPrepareCartridge();
+
+reset();
+
+gbCPU.reset();
+
+pause=0;
+
+console.log(
+"Game Boy ROM loaded from PC:",
+file.name
+);
+
+}
+catch(e){
+
+gbROMLoaded=false;
+pause=1;
+
+console.error(
+"Game Boy local ROM loading failed:",
+e
+);
+
+alert(
+"Could not load ROM:\\n"+
+file.name
+);
+
+}
+
+};
+
+reader.onerror=function(){
+
+gbROMLoaded=false;
+pause=1;
+
+alert(
+"Could not read ROM:\\n"+
+file.name
+);
+
+};
+
+reader.readAsArrayBuffer(file);
+
+}
+catch(e){
+
+gbROMLoaded=false;
+pause=1;
+
+console.error(
+"Game Boy local ROM loading failed:",
+e
+);
+
+}
+
+}
+
+
+function populateROMSelector(list){
+
+GB_ROM_LIST=
+Array.isArray(list)
+?
+list
+:
+[];
+
+romSelect.innerHTML="";
+
+const placeholder=
+document.createElement("option");
+
+placeholder.value="";
+placeholder.textContent=
+"Select ROM...";
+
+romSelect.appendChild(placeholder);
+
+
+for(const path of GB_ROM_LIST){
+
+const option=
+document.createElement("option");
+
+option.value=path;
+option.textContent=
+gbRomDisplayName(path);
+
+romSelect.appendChild(option);
+
+}
+
+romSelect.value="";
+
+}
+
+
+async function loadROMList(){
+
+try{
+
+const response=
+await fetch(
+"roms/index.json",
+{
+cache:"no-store"
+}
+);
+
+if(!response.ok)
+throw new Error(
+"HTTP "+response.status
+);
+
+const list=
+await response.json();
+
+populateROMSelector(list);
+
+}
+catch(e){
+
+console.warn(
+"roms/index.json not found."
+);
+
+populateROMSelector([]);
+
+}
+
+}
+
+
+romSelect.addEventListener(
+"change",
+function(){
+
+const path=
+romSelect.value;
+
+if(path)
+loadGBROM(path);
+
+}
+);
+
+
+const romFile=
+document.getElementById(
+"romFile"
+);
+
+const romFileBtn=
+document.getElementById(
+"romFileBtn"
+);
+
+romFileBtn.onclick=function(){
+
+romFile.click();
+
+};
+
+romFile.addEventListener(
+"change",
+function(){
+
+const file=
+romFile.files&&
+romFile.files[0];
+
+if(file)
+loadGBROMFile(file);
+
+romFile.value="";
+
+}
+);
+
+/* =========================================================
+   SAVE / LOAD STATE
+========================================================= */
+
+function gbBytesToBase64(bytes){
+
+let binary="";
+
+const chunk=0x8000;
+
+for(
+let i=0;
+i<bytes.length;
+i+=chunk
+){
+
+const end=
+Math.min(
+i+chunk,
+bytes.length
+);
+
+for(
+let j=i;
+j<end;
+j++
+){
+
+binary+=
+String.fromCharCode(
+bytes[j]
+);
+
+}
+
+}
+
+return btoa(binary);
+
+}
+
+
+function gbBase64ToBytes(base64){
+
+const binary=
+atob(base64);
+
+const bytes=
+new Uint8Array(
+binary.length
+);
+
+for(
+let i=0;
+i<binary.length;
+i++
+){
+
+bytes[i]=
+binary.charCodeAt(i);
+
+}
+
+return bytes;
+
+}
+
+
+function gbSaveState(){
+
+if(!gbROMLoaded || !gbROM){
+
+alert(
+"Load a Game Boy ROM first."
+);
+
+return;
+
+}
+
+try{
+
+const state={
+
+version:1,
+
+romSize:
+gbROM.length,
+
+/* CPU */
+
+cpu:{
+a:gbCPU.a,
+f:gbCPU.f,
+b:gbCPU.b,
+c:gbCPU.c,
+d:gbCPU.d,
+e:gbCPU.e,
+h:gbCPU.h,
+l:gbCPU.l,
+sp:gbCPU.sp,
+pc:gbCPU.pc,
+halted:gbCPU.halted,
+stopped:gbCPU.stopped,
+ime:gbCPU.ime,
+imeDelay:gbCPU.imeDelay
+},
+
+/* Main memory */
+
+memory:
+gbBytesToBase64(
+gbMemory
+),
+
+/* Video memory */
+
+vram:
+gbBytesToBase64(
+gbVRAM
+),
+
+/* Sprite memory */
+
+oam:
+gbBytesToBase64(
+gbOAM
+),
+
+/* Cartridge RAM */
+
+cartridgeRAM:
+gbBytesToBase64(
+gbCartridge.ram
+),
+
+/* Cartridge */
+
+cartridge:{
+romBank:gbCartridge.romBank,
+ramBank:gbCartridge.ramBank,
+ramEnabled:gbCartridge.ramEnabled,
+bankingMode:gbCartridge.bankingMode,
+mbcType:gbCartridge.mbcType
+},
+
+/* PPU */
+
+ppu:{
+lcdc:gbPPU.lcdc,
+stat:gbPPU.stat,
+scy:gbPPU.scy,
+scx:gbPPU.scx,
+lyc:gbPPU.lyc,
+bgp:gbPPU.bgp,
+obp0:gbPPU.obp0,
+obp1:gbPPU.obp1,
+wy:gbPPU.wy,
+wx:gbPPU.wx,
+ly:gbPPU.ly,
+cycles:gbPPU.cycles,
+mode:gbPPU.mode,
+statIRQLine:gbPPU.statIRQLine,
+
+lineSCX:
+gbBytesToBase64(
+gbPPU.lineSCX
+),
+
+lineSCY:
+gbBytesToBase64(
+gbPPU.lineSCY
+)
+},
+
+/* Timer */
+
+timer:{
+div:gbTimer.div,
+tima:gbTimer.tima,
+tma:gbTimer.tma,
+tac:gbTimer.tac,
+counter:gbTimer.counter
+},
+
+/* APU */
+
+apu:{
+active:[
+...gbAPU.active
+],
+
+phase:[
+...gbAPU.phase
+],
+
+noisePhase:
+gbAPU.noisePhase,
+
+noiseLFSR:
+gbAPU.noiseLFSR
+},
+
+/* Joypad */
+
+joypad:{
+A:gbJoypad.A,
+B:gbJoypad.B,
+SELECT:gbJoypad.SELECT,
+START:gbJoypad.START,
+UP:gbJoypad.UP,
+DOWN:gbJoypad.DOWN,
+LEFT:gbJoypad.LEFT,
+RIGHT:gbJoypad.RIGHT,
+selectButtons:
+gbJoypad.selectButtons,
+selectDpad:
+gbJoypad.selectDpad
+}
+
+};
+
+
+localStorage.setItem(
+"retro_land_gb_save",
+JSON.stringify(state)
+);
+
+alert(
+"Game saved."
+);
+
+console.log(
+"Game Boy save state created."
+);
+
+}
+catch(e){
+
+console.error(
+"Save state failed:",
+e
+);
+
+alert(
+"Could not save the game."
+);
+
+}
+
+}
+
+
+function gbLoadState(){
+
+if(!gbROMLoaded || !gbROM){
+
+alert(
+"Load a Game Boy ROM first."
+);
+
+return;
+
+}
+
+try{
+
+const raw=
+localStorage.getItem(
+"retro_land_gb_save"
+);
+
+if(!raw){
+
+alert(
+"No saved game found."
+);
+
+return;
+
+}
+
+const state=
+JSON.parse(raw);
+
+
+/* Make sure the save belongs to
+   a compatible ROM size */
+
+if(
+state.romSize!==gbROM.length
+){
+
+alert(
+"This save belongs to a different ROM."
+);
+
+return;
+
+}
+
+
+/* CPU */
+
+gbCPU.a=state.cpu.a;
+gbCPU.f=state.cpu.f;
+gbCPU.b=state.cpu.b;
+gbCPU.c=state.cpu.c;
+gbCPU.d=state.cpu.d;
+gbCPU.e=state.cpu.e;
+gbCPU.h=state.cpu.h;
+gbCPU.l=state.cpu.l;
+gbCPU.sp=state.cpu.sp;
+gbCPU.pc=state.cpu.pc;
+gbCPU.halted=state.cpu.halted;
+gbCPU.stopped=state.cpu.stopped;
+gbCPU.ime=state.cpu.ime;
+gbCPU.imeDelay=state.cpu.imeDelay;
+
+
+/* Memory */
+
+gbMemory.set(
+gbBase64ToBytes(
+state.memory
+)
+);
+
+
+/* VRAM */
+
+gbVRAM.set(
+gbBase64ToBytes(
+state.vram
+)
+);
+
+
+/* OAM */
+
+gbOAM.set(
+gbBase64ToBytes(
+state.oam
+)
+);
+
+
+/* Cartridge RAM */
+
+gbCartridge.ram.set(
+gbBase64ToBytes(
+state.cartridgeRAM
+)
+);
+
+
+/* Cartridge */
+
+gbCartridge.romBank=
+state.cartridge.romBank;
+
+gbCartridge.ramBank=
+state.cartridge.ramBank;
+
+gbCartridge.ramEnabled=
+state.cartridge.ramEnabled;
+
+gbCartridge.bankingMode=
+state.cartridge.bankingMode;
+
+gbCartridge.mbcType=
+state.cartridge.mbcType;
+
+
+/* PPU */
+
+gbPPU.lcdc=
+state.ppu.lcdc;
+
+gbPPU.stat=
+state.ppu.stat;
+
+gbPPU.scy=
+state.ppu.scy;
+
+gbPPU.scx=
+state.ppu.scx;
+
+gbPPU.lyc=
+state.ppu.lyc;
+
+gbPPU.bgp=
+state.ppu.bgp;
+
+gbPPU.obp0=
+state.ppu.obp0;
+
+gbPPU.obp1=
+state.ppu.obp1;
+
+gbPPU.wy=
+state.ppu.wy;
+
+gbPPU.wx=
+state.ppu.wx;
+
+gbPPU.ly=
+state.ppu.ly;
+
+gbPPU.cycles=
+state.ppu.cycles;
+
+gbPPU.mode=
+state.ppu.mode;
+
+gbPPU.statIRQLine=
+state.ppu.statIRQLine;
+
+gbPPU.lineSCX.set(
+gbBase64ToBytes(
+state.ppu.lineSCX
+)
+);
+
+gbPPU.lineSCY.set(
+gbBase64ToBytes(
+state.ppu.lineSCY
+)
+);
+
+
+/* Timer */
+
+gbTimer.div=
+state.timer.div;
+
+gbTimer.tima=
+state.timer.tima;
+
+gbTimer.tma=
+state.timer.tma;
+
+gbTimer.tac=
+state.timer.tac;
+
+gbTimer.counter=
+state.timer.counter;
+
+
+/* APU */
+
+gbAPU.active=
+[
+...state.apu.active
+];
+
+gbAPU.phase=
+[
+...state.apu.phase
+];
+
+gbAPU.noisePhase=
+state.apu.noisePhase;
+
+gbAPU.noiseLFSR=
+state.apu.noiseLFSR;
+
+
+/* Joypad */
+
+gbJoypad.A=
+state.joypad.A;
+
+gbJoypad.B=
+state.joypad.B;
+
+gbJoypad.SELECT=
+state.joypad.SELECT;
+
+gbJoypad.START=
+state.joypad.START;
+
+gbJoypad.UP=
+state.joypad.UP;
+
+gbJoypad.DOWN=
+state.joypad.DOWN;
+
+gbJoypad.LEFT=
+state.joypad.LEFT;
+
+gbJoypad.RIGHT=
+state.joypad.RIGHT;
+
+gbJoypad.selectButtons=
+state.joypad.selectButtons;
+
+gbJoypad.selectDpad=
+state.joypad.selectDpad;
+
+
+/* VRAM changed */
+
+gbTileDirty.fill(1);
+
+
+/* Redraw immediately */
+
+gbPPUDrawBackground();
+
+
+alert(
+"Game loaded."
+);
+
+console.log(
+"Game Boy save state loaded."
+);
+
+}
+catch(e){
+
+console.error(
+"Load state failed:",
+e
+);
+
+alert(
+"Could not load the saved game."
+);
+
+}
+
+}   
+
+/* =========================================================
+   TOP BUTTONS
+========================================================= */
+
+document.getElementById(
+"pause"
+).onclick=function(){
+
+pause=!pause;
+
+};
+
+
+document.getElementById(
+"reset"
+).onclick=function(){
+
+reset();
+
+if(gbROMLoaded)
+gbReset();
+
+};
+
+
+document.getElementById(
+"sound"
+).onclick=function(){
+
+sound=!sound;
+
+document.getElementById(
+"sound"
+).textContent=
+sound
+?
+"SOUND ON"
+:
+"SOUND";
+
+if(sound){
+
+GBAudio.start();
+
+beep(700,.05);
+
+}
+else{
+
+GBAudio.stop();
+
+}
+
+};
+
+document.getElementById(
+"speed"
+).onclick=function(){
+
+speed2x=!speed2x;
+
+document.getElementById(
+"speed"
+).textContent=
+speed2x
+?
+"SPEED 2X"
+:
+"SPEED 1X";
+
+};
+
+document.getElementById(
+"save"
+).onclick=function(){
+
+gbSaveState();
+
+};
+
+
+document.getElementById(
+"load"
+).onclick=function(){
+
+gbLoadState();
+
+};   
+/* =========================================================
+   GAME LOOP
+========================================================= */
+
+function loop(t){
+
+last=t;
+
+if(gbROMLoaded&&!pause){
+
+if(speed2x){
+
+gbRunFrame();
+gbRunFrame();
+gbRunFrame();
+gbRunFrame();
+gbRunFrame();
+gbRunFrame();
+
+}
+else{
+
+gbRunFrame();
+
+}
+
+}
+
+requestAnimationFrame(loop);
+
+}
+
+/* =========================================================
+   START
+========================================================= */
+
+gbHardwareReset();
+
+requestAnimationFrame(gp);
+
+requestAnimationFrame(loop);
+
+
+/* A is the initial focused action button,
+   preserving the PS5 X = focused button behavior. */
+
+setTimeout(
+function(){
+
+try{
+
+buttonA.focus();
+
+}
+catch(e){}
+
+},
+300
+);
+
+
+/* Load ROM list only.
+   A ROM is loaded only after the user
+   selects one or opens one from the PC. */
+
+loadROMList();
+
+</script>
+
+</body>
+</html>

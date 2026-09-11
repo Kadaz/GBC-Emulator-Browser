@@ -164,7 +164,7 @@ outline-offset:3px;
 <div id="barLeft">
 
 <b id="barTitle">
-RETRO LAND — GAME BOY STYLE
+RETRO LAND — GAME BOY COLOR
 </b>
 
 <select id="romSelect">
@@ -174,7 +174,7 @@ RETRO LAND — GAME BOY STYLE
 <input
 id="romFile"
 type="file"
-accept=".gb"
+accept=".gb,.gbc"
 style="display:none"
 >
 
@@ -1824,17 +1824,128 @@ requestAnimationFrame(gp);
 
 
 /* =========================================================
-   GAME BOY MEMORY
+   GAME BOY COLOR MEMORY
 ========================================================= */
+
+/*
+   CPU address space.
+
+   We keep the original 64K address space because the CPU
+   itself is the same LR35902-compatible architecture.
+*/
 
 const gbMemory=
 new Uint8Array(0x10000);
 
+
+/*
+   Game Boy Color has 2 VRAM banks.
+
+   Bank 0 = normal tile/map data
+   Bank 1 = tile/map attributes + second tile data bank
+*/
+
 const gbVRAM=
-new Uint8Array(0x2000);
+new Uint8Array(0x4000);
+
+
+/*
+   Game Boy Color has 8 switchable WRAM banks.
+
+   Bank 0 = fixed C000-CFFF
+   Banks 1-7 = D000-DFFF
+*/
+
+const gbWRAM=
+new Uint8Array(0x8000);
+
+
+/*
+   OAM remains 160 bytes.
+*/
 
 const gbOAM=
 new Uint8Array(0xA0);
+
+
+/*
+   Current CGB VRAM bank.
+*/
+
+let gbcVRAMBank=0;
+
+
+/*
+   Current CGB WRAM bank.
+
+   Bank 0 is treated as bank 1 by hardware when selecting
+   the switchable D000-DFFF area.
+*/
+
+let gbcWRAMBank=1;
+
+
+/*
+   CGB mode.
+
+   This becomes true only for a CGB-compatible cartridge
+   running in CGB mode.
+*/
+
+let gbcMode=false;
+
+
+/*
+   KEY1 speed switch.
+
+   We do not activate double-speed CPU execution yet.
+   The register is prepared now so CGB software can see it.
+*/
+
+let gbcKEY1=0x00;
+
+
+/*
+   CGB palette RAM.
+
+   BG palettes:
+   8 palettes × 4 colors × 2 bytes = 64 bytes
+
+   OBJ palettes:
+   8 palettes × 4 colors × 2 bytes = 64 bytes
+*/
+
+const gbcBGPaletteRAM=
+new Uint8Array(0x40);
+
+const gbcOBJPaletteRAM=
+new Uint8Array(0x40);
+
+
+let gbcBGPaletteIndex=0;
+let gbcOBJPaletteIndex=0;
+
+
+/*
+   CGB HDMA registers.
+
+   First stage only: registers/state.
+   Actual HDMA execution comes next.
+*/
+
+const gbcHDMA={
+H:0,
+L:0,
+C:0,
+E:0,
+D:0,
+A:0,
+B:0,
+control:0,
+active:false,
+hblank:false,
+remaining:0
+};
 
 
 /* =========================================================
@@ -1943,6 +2054,8 @@ ramEnabled:false,
 
 bankingMode:0
 
+cgb:false,   
+
 };
 
 
@@ -1966,6 +2079,27 @@ obp1:0xFF,
 
 wy:0x00,
 wx:0x00,
+/* =========================================================
+   CGB PPU
+========================================================= */
+
+cgbBGPI:0,
+cgbOBPI:0,
+
+cgbBGPD:0,
+cgbOBPD:0,
+
+/*
+   Current CGB background palette values.
+*/
+
+bgPalette:new Uint8Array(0x40),
+
+/*
+   Current CGB object palette values.
+*/
+
+objPalette:new Uint8Array(0x40)   
 
 ly:0x00,
 cycles:0,
@@ -2117,6 +2251,47 @@ return 0xFF;
 
 
 /* =========================================================
+   CGB MEMORY BANK HELPERS
+========================================================= */
+
+function gbcVRAMOffset(addr){
+
+return(
+gbcVRAMBank*0x2000+
+(addr-0x8000)
+);
+
+}
+
+
+function gbcWRAMOffset(addr){
+
+/*
+   C000-CFFF = fixed WRAM bank 0
+*/
+
+if(
+addr>=0xC000 &&
+addr<0xD000
+){
+
+return addr-0xC000;
+
+}
+
+
+/*
+   D000-DFFF = selected WRAM bank.
+*/
+
+return(
+gbcWRAMBank*0x1000+
+(addr-0xD000)
+);
+
+}   
+
+/* =========================================================
    MEMORY READ
 ========================================================= */
 
@@ -2135,7 +2310,7 @@ addr<=0x9FFF
 ){
 
 return gbVRAM[
-addr-0x8000
+gbcVRAMOffset(addr)
 ];
 
 }
@@ -2165,7 +2340,9 @@ addr>=0xC000 &&
 addr<0xE000
 ){
 
-return gbMemory[addr];
+return gbWRAM[
+gbcWRAMOffset(addr)
+];
 
 }
 
@@ -2307,6 +2484,62 @@ if(addr===0xFF4B)
 return gbPPU.wx;
 
 
+/* =========================================================
+   CGB REGISTERS
+========================================================= */
+
+if(addr===0xFF4D){
+
+return gbcKEY1|0x7E;
+
+}
+
+
+if(addr===0xFF4F){
+
+return 0xFE|gbcVRAMBank;
+
+}
+
+
+if(addr===0xFF68){
+
+return gbcBGPaletteIndex;
+
+}
+
+
+if(addr===0xFF69){
+
+return gbcBGPaletteRAM[
+gbcBGPaletteIndex&0x3F
+];
+
+}
+
+
+if(addr===0xFF6A){
+
+return gbcOBJPaletteIndex;
+
+}
+
+
+if(addr===0xFF6B){
+
+return gbcOBJPaletteRAM[
+gbcOBJPaletteIndex&0x3F
+];
+
+}
+
+
+if(addr===0xFF70){
+
+return 0xF8|gbcWRAMBank;
+
+}
+   
 if(addr===0xFFFF)
 return gbMemory[0xFFFF];
 
@@ -2593,7 +2826,173 @@ return;
 return;
 
 }
+/* =========================================================
+   CGB BANK / PALETTE REGISTERS
+========================================================= */
 
+
+/*
+   FF4D — KEY1
+   CGB speed switch register.
+*/
+
+if(addr===0xFF4D){
+
+gbcKEY1=
+(gbcKEY1&0x80)|
+(value&0x01);
+
+return;
+
+}
+
+
+/*
+   FF4F — VBK
+   VRAM bank select.
+
+   Only bit 0 matters.
+*/
+
+if(addr===0xFF4F){
+
+gbcVRAMBank=
+value&0x01;
+
+return;
+
+}
+
+
+/*
+   FF68 — BGPI
+   Background palette index.
+
+   Bit 7 = auto increment
+   Bits 0-5 = palette RAM index
+*/
+
+if(addr===0xFF68){
+
+gbcBGPaletteIndex=
+value&0xBF;
+
+return;
+
+}
+
+
+/*
+   FF69 — BGPD
+   Background palette data.
+*/
+
+if(addr===0xFF69){
+
+const index=
+gbcBGPaletteIndex&0x3F;
+
+
+gbcBGPaletteRAM[index]=
+value;
+
+
+/*
+   Auto increment.
+
+   Keep bit 7 enabled while increasing
+   the actual 6-bit index.
+*/
+
+if(
+gbcBGPaletteIndex&0x80
+){
+
+gbcBGPaletteIndex=
+0x80|
+(
+(index+1)&0x3F
+);
+
+}
+
+return;
+
+}
+
+
+/*
+   FF6A — OBPI
+   Object/sprite palette index.
+*/
+
+if(addr===0xFF6A){
+
+gbcOBJPaletteIndex=
+value&0xBF;
+
+return;
+
+}
+
+
+/*
+   FF6B — OBPD
+   Object/sprite palette data.
+*/
+
+if(addr===0xFF6B){
+
+const index=
+gbcOBJPaletteIndex&0x3F;
+
+
+gbcOBJPaletteRAM[index]=
+value;
+
+
+if(
+gbcOBJPaletteIndex&0x80
+){
+
+gbcOBJPaletteIndex=
+0x80|
+(
+(index+1)&0x3F
+);
+
+}
+
+return;
+
+}
+
+
+/*
+   FF70 — SVBK
+   Switchable WRAM bank.
+*/
+
+if(addr===0xFF70){
+
+let bank=
+value&0x07;
+
+
+/*
+   Selecting bank 0 actually selects bank 1.
+*/
+
+if(bank===0)
+bank=1;
+
+
+gbcWRAMBank=
+bank;
+
+return;
+
+}
 
 /* VRAM */
 
@@ -2603,15 +3002,13 @@ addr<=0x9FFF
 ){
 
 gbVRAM[
-addr-0x8000
-]=value;
-
-gbInvalidateTile(addr);
+gbcVRAMOffset(addr)
+]=
+value;
 
 return;
 
 }
-
 
 /* CARTRIDGE RAM */
 
@@ -2643,7 +3040,10 @@ addr>=0xC000 &&
 addr<0xE000
 ){
 
-gbMemory[addr]=value;
+gbWRAM[
+gbcWRAMOffset(addr)
+]=
+value;
 
 return;
 
@@ -2657,9 +3057,14 @@ addr>=0xE000 &&
 addr<0xFE00
 ){
 
-gbMemory[
-addr-0x2000
-]=value;
+const mirror=
+addr-0x2000;
+
+
+gbWRAM[
+gbcWRAMOffset(mirror)
+]=
+value;
 
 return;
 
@@ -7117,8 +7522,18 @@ function gbDetectCartridge(){
 if(!gbCartridge.rom)
 return;
 
+
+/*
+   Cartridge type.
+*/
+
 gbCartridge.mbcType=
 gbCartridge.rom[0x0147]||0;
+
+
+/*
+   ROM size.
+*/
 
 const romSizeCode=
 gbCartridge.rom[0x0148]||0;
@@ -7137,12 +7552,59 @@ gbCartridge.rom.length;
 
 }
 
+
+/*
+   CGB compatibility flag.
+
+   0x80 = CGB compatible
+   0xC0 = CGB only
+*/
+
+const cgbFlag=
+gbCartridge.rom[0x0143]||0;
+
+gbCartridge.cgb=
+(
+cgbFlag===0x80 ||
+cgbFlag===0xC0
+);
+
+
+/*
+   Start in CGB mode for a CGB cartridge.
+
+   Later we can add the exact DMG/CGB boot decision.
+*/
+
+gbcMode=
+gbCartridge.cgb;
+
+
+/*
+   Useful console information.
+*/
+
 console.log(
 "Game Boy cartridge type:",
 "0x"+
 gbCartridge.mbcType
 .toString(16)
 .padStart(2,"0")
+);
+
+console.log(
+"CGB cartridge:",
+gbCartridge.cgb
+);
+
+console.log(
+"CGB mode:",
+gbcMode
+);
+
+console.log(
+"ROM size:",
+gbCartridge.romSize
 );
 
 }

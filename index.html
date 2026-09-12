@@ -5544,6 +5544,45 @@ const bgMapBase=
 :
 0x9800;
 
+/* =========================================================
+   CGB COLOR PALETTE
+========================================================= */
+
+function gbcGetBGColor(palette,color){
+
+palette&=7;
+color&=3;
+
+const index=
+palette*8+
+color*2;
+
+const lo=
+gbcBGPaletteRAM[index];
+
+const hi=
+gbcBGPaletteRAM[index+1];
+
+const rgb15=
+lo|
+((hi&0x7F)<<8);
+
+const r5=
+rgb15&0x1F;
+
+const g5=
+(rgb15>>5)&0x1F;
+
+const b5=
+(rgb15>>10)&0x1F;
+
+return{
+r:(r5<<3)|(r5>>2),
+g:(g5<<3)|(g5>>2),
+b:(b5<<3)|(b5>>2)
+};
+
+}
 
 /* BACKGROUND */
 
@@ -5578,24 +5617,67 @@ const worldX=
 const tileX=
 worldX>>3;
 
-const tileIndex=
-gbVRAM[
+const mapOffset=
 (bgMapBase-0x8000)+
 mapRow+
-tileX
+tileX;
+
+const tileIndex=
+gbVRAM[
+mapOffset
 ];
 
-const tile=
+let tile=
 gbGetTileIndex(
 tileIndex,
 signedMode
 );
 
+let attr=0;
+
+if(gbcMode){
+
+attr=
+gbVRAM[
+0x2000+
+mapOffset
+];
+
+}
+
+const tileBank=
+(attr&0x08)
+?
+1
+:
+0;
+
+let tileRow=
+row;
+
+let tileCol=
+worldX&7;
+
+if(attr&0x40){
+
+tileRow=
+7-tileRow;
+
+}
+
+if(attr&0x20){
+
+tileCol=
+7-tileCol;
+
+}
+
 const color=
 gbGetTilePixel(
 tile,
-row,
-worldX&7
+tileRow,
+tileCol,
+tileBank
 );
 
 const pixel=
@@ -5603,18 +5685,53 @@ basePixel+screenX;
 
 bg[pixel]=color;
 
+const i=
+pixel*4;
+
+if(gbcMode){
+
+const palette=
+attr&0x07;
+
+const rgb=
+gbcGetBGColor(
+palette,
+color
+);
+
+image[i]=
+rgb.r;
+
+image[i+1]=
+rgb.g;
+
+image[i+2]=
+rgb.b;
+
+image[i+3]=
+255;
+
+}
+else{
+
 const shade=
 gbShadeTable[
 bgp*4+color
 ];
 
-const i=
-pixel*4;
+image[i]=
+shade;
 
-image[i]=shade;
-image[i+1]=shade;
-image[i+2]=shade;
-image[i+3]=255;
+image[i+1]=
+shade;
+
+image[i+2]=
+shade;
+
+image[i+3]=
+255;
+
+}
 
 }
 
@@ -5666,43 +5783,123 @@ windowX>>3;
 if(tileX>=32)
 continue;
 
-const tileIndex=
-gbVRAM[
+const mapOffset=
 (windowMap-0x8000)+
 tileY*32+
-tileX
+tileX;
+
+const tileIndex=
+gbVRAM[
+mapOffset
 ];
 
-const tile=
+let tile=
 gbGetTileIndex(
 tileIndex,
 signedMode
 );
 
+let attr=0;
+
+if(gbcMode){
+
+attr=
+gbVRAM[
+0x2000+
+mapOffset
+];
+
+}
+
+const tileBank=
+(attr&0x08)
+?
+1
+:
+0;
+
+let tileRow=
+row;
+
+let tileCol=
+windowX&7;
+
+if(attr&0x40){
+
+tileRow=
+7-tileRow;
+
+}
+
+if(attr&0x20){
+
+tileCol=
+7-tileCol;
+
+}
+
 const color=
 gbGetTilePixel(
 tile,
-row,
-windowX&7
+tileRow,
+tileCol,
+tileBank
 );
-
 const pixel=
 y*160+screenX;
 
 bg[pixel]=color;
 
 const shade=
-gbShadeTable[
-bgp*4+color
-];
+bg[pixel]=color;
 
 const i=
 pixel*4;
 
-image[i]=shade;
-image[i+1]=shade;
-image[i+2]=shade;
-image[i+3]=255;
+if(gbcMode){
+
+const palette=
+attr&0x07;
+
+const rgb=
+gbcGetBGColor(
+palette,
+color
+);
+
+image[i]=
+rgb.r;
+
+image[i+1]=
+rgb.g;
+
+image[i+2]=
+rgb.b;
+
+image[i+3]=
+255;
+
+}
+else{
+
+const shade=
+gbShadeTable[
+bgp*4+color
+];
+
+image[i]=
+shade;
+
+image[i+1]=
+shade;
+
+image[i+2]=
+shade;
+
+image[i+3]=
+255;
+
+}
 
 }
 

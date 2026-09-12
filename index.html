@@ -1961,12 +1961,12 @@ remaining:0
 
 const gbTileCache=
 new Uint8Array(
-384*64
+2*384*64
 );
 
 const gbTileDirty=
 new Uint8Array(
-384
+2*384
 );
 
 gbTileDirty.fill(1);
@@ -1982,14 +1982,20 @@ physical>=0 &&
 physical<384
 ){
 
-gbTileDirty[physical]=1;
+const bank=
+gbcVRAMBank&1;
+
+gbTileDirty[
+bank*384+
+physical
+]=1;
 
 }
 
 }
 
 
-function gbDecodeTile(tile){
+function gbDecodeTile(tile,bank=0){
 
 if(
 tile<0 ||
@@ -1997,13 +2003,20 @@ tile>=384
 )
 return;
 
-if(!gbTileDirty[tile])
+bank&=1;
+
+const cacheIndex=
+bank*384+
+tile;
+
+if(!gbTileDirty[cacheIndex])
 return;
 
 const base=
-tile*64;
+cacheIndex*64;
 
 const vbase=
+bank*0x2000+
 tile*16;
 
 for(let row=0;row<8;row++){
@@ -2029,7 +2042,7 @@ gbTileCache[out+px]=
 
 }
 
-gbTileDirty[tile]=0;
+gbTileDirty[cacheIndex]=0;
 
 }
 
@@ -5481,12 +5494,21 @@ return 256+signed;
 }
 
 
-function gbGetTilePixel(tile,row,col){
+function gbGetTilePixel(tile,row,col,bank=0){
 
-gbDecodeTile(tile);
+bank&=1;
+
+gbDecodeTile(
+tile,
+bank
+);
+
+const cacheIndex=
+bank*384+
+tile;
 
 return gbTileCache[
-tile*64+
+cacheIndex*64+
 row*8+
 col
 ];

@@ -5583,7 +5583,84 @@ gbPPU.stat=
 stat|0x80;
 
 }
+/* =========================================================
+   CGB HDMA — GENERAL PURPOSE DMA
+   ========================================================= */
 
+function gbcGDMA(){
+
+if(!gbcHDMA.active)
+return;
+
+if(gbcHDMA.hblank)
+return;
+
+while(gbcHDMA.remaining>0){
+
+const source=
+(
+(gbcHDMA.H<<8)|
+gbcHDMA.L
+)&0xFFF0;
+
+const destination=
+0x8000|
+(
+((gbcHDMA.C&0x1F)<<8)|
+(gbcHDMA.E&0xF0)
+);
+
+for(
+let i=0;
+i<0x10;
+i++
+){
+
+const value=
+gbRead(
+(source+i)&0xFFFF
+);
+
+gbVRAM[
+gbcVRAMOffset(
+(destination+i)&0x1FFF
+)
+]=value;
+
+}
+
+const nextSource=
+(source+0x10)&0xFFFF;
+
+gbcHDMA.H=
+(nextSource>>8)&0xFF;
+
+gbcHDMA.L=
+nextSource&0xF0;
+
+const nextDestination=
+(destination+0x10)&0x9FF0;
+
+gbcHDMA.C=
+(nextDestination>>8)&0x1F;
+
+gbcHDMA.E=
+nextDestination&0xF0;
+
+gbcHDMA.remaining-=0x10;
+
+}
+
+gbcHDMA.remaining=0;
+
+gbcHDMA.active=false;
+
+gbcHDMA.control=0xFF;
+
+gbTileDirty.fill(1);
+
+}
+   
 /* =========================================================
    CGB HDMA — HBLANK TRANSFER
    ========================================================= */

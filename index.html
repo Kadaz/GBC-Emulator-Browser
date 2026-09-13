@@ -5511,7 +5511,132 @@ stat|0x80;
 
 }
 
+/* =========================================================
+   CGB HDMA — HBLANK TRANSFER
+   ========================================================= */
 
+function gbcHDMATransferBlock(){
+
+if(!gbcHDMA.active)
+return;
+
+if(!gbcHDMA.hblank)
+return;
+
+if(gbcHDMA.remaining<=0){
+
+gbcHDMA.active=false;
+
+return;
+
+}
+
+
+/*
+   Current source address.
+*/
+const source=
+(
+(gbcHDMA.H<<8)|
+gbcHDMA.L
+)&0xFFF0;
+
+
+/*
+   Current destination address.
+
+   CGB HDMA destination is always
+   inside VRAM 8000-9FF0.
+*/
+const destination=
+0x8000|
+(
+((gbcHDMA.C&0x1F)<<8)|
+(gbcHDMA.E&0xF0)
+);
+
+
+/*
+   Transfer exactly 16 bytes.
+*/
+for(
+let i=0;
+i<0x10;
+i++
+){
+
+const value=
+gbRead(
+(source+i)&0xFFFF
+);
+
+
+/*
+   HDMA writes directly to the
+   currently selected VRAM bank.
+*/
+gbVRAM[
+gbcVRAMOffset(
+(destination+i)&0x1FFF
+)
+]=value;
+
+}
+
+
+/*
+   Advance source by 16 bytes.
+*/
+const nextSource=
+(source+0x10)&0xFFFF;
+
+gbcHDMA.H=
+(nextSource>>8)&0xFF;
+
+gbcHDMA.L=
+nextSource&0xF0;
+
+
+/*
+   Advance destination by 16 bytes.
+*/
+const nextDestination=
+(destination+0x10)&0x9FF0;
+
+gbcHDMA.C=
+(nextDestination>>8)&0x1F;
+
+gbcHDMA.E=
+nextDestination&0xF0;
+
+
+/*
+   One HDMA block = 16 bytes.
+*/
+gbcHDMA.remaining-=0x10;
+
+
+/*
+   Mark all affected tiles dirty.
+*/
+gbTileDirty.fill(1);
+
+
+/*
+   Transfer finished.
+*/
+if(gbcHDMA.remaining<=0){
+
+gbcHDMA.remaining=0;
+
+gbcHDMA.active=false;
+
+gbcHDMA.control=
+0xFF;
+
+}
+
+}
 /* =========================================================
    PPU STEP
 ========================================================= */
@@ -5521,7 +5646,29 @@ function gbPPUStep(cycles){
 if(!(gbPPU.lcdc&0x80))
 return;
 
+const oldCycles=
+gbPPU.cycles;
+
 gbPPU.cycles+=cycles;
+/*
+   CGB HDMA starts when the PPU
+   enters HBlank.
+
+   Visible scanlines only.
+*/
+if(
+gbcHDMA.active &&
+gbcHDMA.hblank &&
+gbPPU.ly<144 &&
+oldCycles<252 &&
+gbPPU.cycles>=252
+){
+
+gbcHDMATransferBlock();
+
+}
+const oldCycles=
+gbPPU.cycles;
 
 while(gbPPU.cycles>=456){
 

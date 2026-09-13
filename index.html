@@ -3361,6 +3361,35 @@ gbPPU.lineSCY.fill(0);
 
 gbPPU.lineSCX[0]=gbPPU.scx;
 gbPPU.lineSCY[0]=gbPPU.scy;
+/* =========================================================
+   CGB RESET STATE
+========================================================= */
+
+gbcVRAMBank=0;
+gbcWRAMBank=1;
+
+gbcKEY1=0x00;
+
+gbcBGPaletteRAM.fill(0);
+gbcOBJPaletteRAM.fill(0);
+
+gbcBGPaletteIndex=0;
+gbcOBJPaletteIndex=0;
+
+
+/* CGB HDMA reset */
+
+gbcHDMA.H=0;
+gbcHDMA.L=0;
+gbcHDMA.C=0;
+gbcHDMA.E=0;
+gbcHDMA.D=0;
+gbcHDMA.A=0;
+gbcHDMA.B=0;
+gbcHDMA.control=0;
+gbcHDMA.active=false;
+gbcHDMA.hblank=false;
+gbcHDMA.remaining=0;
 
 
 gbJoypad.A=0;

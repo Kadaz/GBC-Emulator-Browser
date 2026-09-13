@@ -2507,7 +2507,54 @@ return gbcKEY1|0x7E;
 
 }
 
+/* =========================================================
+   CGB HDMA REGISTERS — READ
+   ========================================================= */
 
+if(addr===0xFF51){
+
+return gbcHDMA.H;
+
+}
+
+
+if(addr===0xFF52){
+
+return gbcHDMA.L|0x0F;
+
+}
+
+
+if(addr===0xFF53){
+
+return gbcHDMA.C|0xE0;
+
+}
+
+
+if(addr===0xFF54){
+
+return gbcHDMA.E|0x0F;
+
+}
+
+
+if(addr===0xFF55){
+
+if(!gbcHDMA.active){
+
+return 0xFF;
+
+}
+
+return(
+0x80|
+(
+(gbcHDMA.remaining/0x10)-1
+)
+);
+
+}
 if(addr===0xFF4F){
 
 return 0xFE|gbcVRAMBank;
@@ -3343,11 +3390,37 @@ return;
 
 if(addr===0xFF55){
 
+/*
+   If HBlank HDMA is already active,
+   writing bit 7 = 0 cancels it.
+*/
+if(
+gbcHDMA.active &&
+gbcHDMA.hblank &&
+!(value&0x80)
+){
+
+gbcHDMA.active=false;
+
+gbcHDMA.hblank=true;
+
+gbcHDMA.control=
+(value&0x7F);
+
+return;
+
+}
+
+
+/*
+   Start a new HDMA transfer.
+*/
 gbcHDMA.control=value;
 
 gbcHDMA.active=true;
 
-gbcHDMA.hblank=!!(value&0x80);
+gbcHDMA.hblank=
+!!(value&0x80);
 
 gbcHDMA.remaining=
 ((value&0x7F)+1)*0x10;

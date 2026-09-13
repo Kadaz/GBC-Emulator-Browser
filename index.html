@@ -3301,7 +3301,60 @@ return;
 
 }
 
+/* =========================================================
+   CGB HDMA REGISTERS
+   ========================================================= */
 
+if(addr===0xFF51){
+
+gbcHDMA.H=value;
+
+return;
+
+}
+
+
+if(addr===0xFF52){
+
+gbcHDMA.L=value&0xF0;
+
+return;
+
+}
+
+
+if(addr===0xFF53){
+
+gbcHDMA.C=value&0x1F;
+
+return;
+
+}
+
+
+if(addr===0xFF54){
+
+gbcHDMA.E=value&0xF0;
+
+return;
+
+}
+
+
+if(addr===0xFF55){
+
+gbcHDMA.control=value;
+
+gbcHDMA.active=true;
+
+gbcHDMA.hblank=!!(value&0x80);
+
+gbcHDMA.remaining=
+((value&0x7F)+1)*0x10;
+
+return;
+
+}
 if(addr===0xFFFF){
 
 gbMemory[0xFFFF]=value;

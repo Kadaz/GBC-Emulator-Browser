@@ -5914,6 +5914,51 @@ image[i+3]=
 
 if(lcdc&0x02){
 
+/* =========================================================
+   CGB OBJECT / SPRITE PALETTE
+========================================================= */
+
+function gbcGetOBJColor(palette,color){
+
+palette&=7;
+color&=3;
+
+const index=
+palette*8+
+color*2;
+
+const lo=
+gbcOBJPaletteRAM[index];
+
+const hi=
+gbcOBJPaletteRAM[index+1];
+
+const rgb15=
+lo|
+((hi&0x7F)<<8);
+
+const r5=
+rgb15&0x1F;
+
+const g5=
+(rgb15>>5)&0x1F;
+
+const b5=
+(rgb15>>10)&0x1F;
+
+return{
+r:(r5<<3)|(r5>>2),
+g:(g5<<3)|(g5>>2),
+b:(b5<<3)|(b5>>2)
+};
+
+}
+
+
+/* =========================================================
+   SPRITE RENDERING
+========================================================= */
+
 const spriteHeight=
 (lcdc&0x04)
 ?
@@ -5923,7 +5968,8 @@ const spriteHeight=
 
 for(let sprite=0;sprite<40;sprite++){
 
-const base=sprite*4;
+const base=
+sprite*4;
 
 const sy=
 gbOAM[base]-16;
@@ -5937,6 +5983,11 @@ gbOAM[base+2];
 const flags=
 gbOAM[base+3];
 
+
+/* ---------------------------------------------------------
+   CGB sprite attributes
+--------------------------------------------------------- */
+
 const flipX=
 !!(flags&0x20);
 
@@ -5946,13 +5997,39 @@ const flipY=
 const behindBG=
 !!(flags&0x80);
 
+
+/*
+   Bit 3 selects VRAM bank on CGB.
+*/
+const spriteBank=
+(flags&0x08)
+?
+1
+:
+0;
+
+
+/*
+   CGB uses 8 OBJ palettes.
+   DMG uses OBP0 / OBP1.
+*/
 const spritePalette=
+gbcMode
+?
+(flags&0x07)
+:
+(
 (flags&0x10)
 ?
 gbPPU.obp1
 :
-gbPPU.obp0;
+gbPPU.obp0
+);
 
+
+/*
+   8x16 sprites always start on an even tile.
+*/
 if(spriteHeight===16)
 tile&=0xFE;
 
@@ -5966,8 +6043,13 @@ spriteHeight-1-py
 :
 py;
 
-let tileNumber=tile;
+let tileNumber=
+tile;
 
+
+/*
+   Second tile of an 8x16 sprite.
+*/
 if(spriteHeight===16){
 
 if(actualY>=8){
@@ -5991,21 +6073,29 @@ flipX
 :
 px;
 
+
 const color=
 gbGetTilePixel(
 tileNumber,
 actualY,
-actualX
+actualX,
+spriteBank
 );
 
+
+/*
+   Color 0 is transparent for sprites.
+*/
 if(color===0)
 continue;
+
 
 const screenX=
 sx+px;
 
 const screenY=
 sy+py;
+
 
 if(
 screenX<0 ||
@@ -6015,6 +6105,10 @@ screenY>=144
 )
 continue;
 
+
+/*
+   Sprite priority.
+*/
 if(
 behindBG &&
 bg[
@@ -6023,18 +6117,61 @@ screenY*160+screenX
 )
 continue;
 
-const shade=
-gbShadeTable[
-spritePalette*4+color
-];
 
 const i=
 (screenY*160+screenX)*4;
 
-image[i]=shade;
-image[i+1]=shade;
-image[i+2]=shade;
-image[i+3]=255;
+
+/* =========================================================
+   CGB COLOR
+========================================================= */
+
+if(gbcMode){
+
+const rgb=
+gbcGetOBJColor(
+spritePalette,
+color
+);
+
+image[i]=
+rgb.r;
+
+image[i+1]=
+rgb.g;
+
+image[i+2]=
+rgb.b;
+
+image[i+3]=
+255;
+
+}
+
+
+/* =========================================================
+   DMG COLOR
+========================================================= */
+
+else{
+
+const shade=
+gbShadeTable[
+spritePalette*4+
+color
+];
+
+image[i]=
+shade;
+
+image[i+1]=
+shade;
+
+image[i+2]=
+shade;
+
+image[i+3]=
+255;
 
 }
 
@@ -6043,7 +6180,6 @@ image[i+3]=255;
 }
 
 }
-
 
 gbCtx.putImageData(
 gbImage,

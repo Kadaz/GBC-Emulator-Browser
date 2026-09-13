@@ -3425,6 +3425,16 @@ gbcHDMA.hblank=
 gbcHDMA.remaining=
 ((value&0x7F)+1)*0x10;
 
+
+/*
+   General Purpose DMA starts immediately.
+*/
+if(!gbcHDMA.hblank){
+
+gbcGDMA();
+
+}
+
 return;
 
 }

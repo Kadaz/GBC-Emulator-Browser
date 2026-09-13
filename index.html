@@ -5556,6 +5556,14 @@ gbImage.data;
 
 const bg=
 gbBGColorIndex;
+/*
+   CGB BG-to-OAM priority for each screen pixel.
+
+   Bit 7 of the CGB tile attribute tells the PPU
+   whether the background tile has priority over sprites.
+*/
+const gbBGPriority=
+new Uint8Array(160*144);
 
 const lcdc=
 gbPPU.lcdc;
@@ -5713,6 +5721,23 @@ const pixel=
 basePixel+screenX;
 
 bg[pixel]=color;
+
+
+/*
+   CGB BG-to-OAM priority.
+
+   Attribute bit 7:
+   0 = normal BG priority
+   1 = BG tile has priority over sprites
+*/
+gbBGPriority[pixel]=
+gbcMode &&
+(attr&0x80)
+?
+1
+:
+0;
+
 
 const i=
 pixel*4;
@@ -5879,8 +5904,21 @@ y*160+screenX;
 
 bg[pixel]=color;
 
-const shade=
-bg[pixel]=color;
+
+/*
+   CGB BG-to-OAM priority for the window.
+
+   The window uses the same attribute format
+   as the background tile maps.
+*/
+gbBGPriority[pixel]=
+gbcMode &&
+(attr&0x80)
+?
+1
+:
+0;
+
 
 const i=
 pixel*4;
@@ -6138,11 +6176,40 @@ continue;
 /*
    Sprite priority.
 */
+const spritePixel=
+screenY*160+screenX;
+
+
+/*
+   Sprite priority.
+
+   DMG:
+   The OBJ priority flag hides the sprite behind
+   a non-zero BG color.
+
+   CGB:
+   The sprite is hidden when either:
+   - the sprite itself requests BG priority, OR
+   - the CGB BG tile has attribute bit 7 set.
+*/
 if(
+(
+!gbcMode &&
 behindBG &&
-bg[
-screenY*160+screenX
-]!==0
+bg[spritePixel]!==0
+)
+||
+(
+gbcMode &&
+(
+(
+behindBG &&
+bg[spritePixel]!==0
+)
+||
+gbBGPriority[spritePixel]
+)
+)
 )
 continue;
 

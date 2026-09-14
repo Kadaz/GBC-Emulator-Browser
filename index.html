@@ -3401,10 +3401,10 @@ gbcHDMA.hblank &&
 
 gbcHDMA.active=false;
 
-gbcHDMA.hblank=true;
+gbcHDMA.hblank=false;
 
 gbcHDMA.control=
-(value&0x7F);
+(value&0x7F)|0x80;
 
 return;
 

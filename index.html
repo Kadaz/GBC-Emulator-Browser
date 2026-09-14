@@ -2548,10 +2548,9 @@ return 0xFF;
 }
 
 return(
-0x80|
 (
 (gbcHDMA.remaining/0x10)-1
-)
+)&0x7F
 );
 
 }

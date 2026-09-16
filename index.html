@@ -2541,16 +2541,43 @@ return gbcHDMA.E|0x0F;
 
 if(addr===0xFF55){
 
-if(!gbcHDMA.active){
+/*
+   FF55 = FF when no transfer remains.
+*/
+if(gbcHDMA.remaining<=0){
 
 return 0xFF;
 
 }
 
+/*
+   Active HBlank HDMA:
+   bit 7 = 0
+*/
+if(
+gbcHDMA.active &&
+gbcHDMA.hblank
+){
+
 return(
 (
 (gbcHDMA.remaining/0x10)-1
 )&0x7F
+);
+
+}
+
+/*
+   Cancelled HBlank HDMA:
+   bit 7 = 1
+*/
+return(
+0x80|
+(
+(
+gbcHDMA.remaining/0x10
+)-1
+)
 );
 
 }

@@ -6114,7 +6114,7 @@ bg[pixel]=color;
    0 = normal BG priority
    1 = BG tile has priority over sprites
 */
-gbBGPriority[pixel]=
+gbBGPriority[pixel]=0;
 gbcMode &&
 (attr&0x80) &&
 color!==0
@@ -6296,7 +6296,7 @@ bg[pixel]=color;
    The window uses the same attribute format
    as the background tile maps.
 */
-gbBGPriority[pixel]=
+gbBGPriority[pixel]=0;
 gbcMode &&
 (attr&0x80) &&
 color!==0

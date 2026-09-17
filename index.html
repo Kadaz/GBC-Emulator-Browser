@@ -6116,7 +6116,8 @@ bg[pixel]=color;
 */
 gbBGPriority[pixel]=
 gbcMode &&
-(attr&0x80)
+(attr&0x80) &&
+color!==0
 ?
 1
 :
@@ -6297,7 +6298,8 @@ bg[pixel]=color;
 */
 gbBGPriority[pixel]=
 gbcMode &&
-(attr&0x80)
+(attr&0x80) &&
+color!==0
 ?
 1
 :

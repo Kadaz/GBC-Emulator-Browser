@@ -6128,28 +6128,18 @@ const i=
 pixel*4;
 
 if(gbcMode){
-
-const palette=
-attr&0x07;
-
-const rgb=
-gbcGetBGColor(
-palette,
-color
-);
-
+const shade=
+gbShadeTable[
+bgp*4+color
+];
 image[i]=
-rgb.r;
-
+shade;
 image[i+1]=
-rgb.g;
-
+shade;
 image[i+2]=
-rgb.b;
-
+shade;
 image[i+3]=
 255;
-
 }
 else{
 

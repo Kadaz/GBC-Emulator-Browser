@@ -3282,21 +3282,7 @@ return;
 
 if(addr===0xFF40){
 
-const oldLCDC=
-gbPPU.lcdc;
-
 gbPPU.lcdc=value;
-
-if(
-(oldLCDC&0x80) &&
-!(value&0x80)
-){
-
-gbPPU.ly=0;
-gbPPU.cycles=0;
-gbPPU.mode=0;
-
-}
 
 return;
 

@@ -3679,6 +3679,19 @@ gbcOBJPaletteRAM.fill(0);
 
 gbcBGPaletteIndex=0;
 gbcOBJPaletteIndex=0;
+if(gbcMode){
+
+gbcVRAMBank=0;
+gbcWRAMBank=1;
+
+gbcKEY1=0x00;
+
+gbMemory[0xFF4C]=0x00;
+gbMemory[0xFF4D]=0x00;
+gbMemory[0xFF4F]=0x00;
+gbMemory[0xFF70]=0x01;
+
+}
 
 
 /* CGB HDMA reset */

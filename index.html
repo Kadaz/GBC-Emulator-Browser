@@ -2561,7 +2561,14 @@ return gbPPU.wy;
 if(addr===0xFF4B)
 return gbPPU.wx;
 
+if(addr===0xFF4C){
 
+if(gbcMode)
+return 0x04;
+
+return 0x00;
+
+}
 /* =========================================================
    CGB REGISTERS
 ========================================================= */
@@ -3768,6 +3775,23 @@ class GBCPU{
 
 constructor(){
 
+if(gbcMode){
+
+this.a=0x11;
+this.f=0x80;
+
+this.b=0x00;
+this.c=0x00;
+
+this.d=0x00;
+this.e=0x08;
+
+this.h=0x00;
+this.l=0x7C;
+
+}
+else{
+
 this.a=0x01;
 this.f=0xB0;
 
@@ -3779,6 +3803,8 @@ this.e=0xD8;
 
 this.h=0x01;
 this.l=0x4D;
+
+}
 
 this.sp=0xFFFE;
 this.pc=0x0100;

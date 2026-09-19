@@ -2372,8 +2372,16 @@ addr>=0x8000 &&
 addr<=0x9FFF
 ){
 
+if(gbcMode){
+
 return gbVRAM[
 gbcVRAMOffset(addr)
+];
+
+}
+
+return gbVRAM[
+addr-0x8000
 ];
 
 }

@@ -2572,9 +2572,9 @@ return gbPPU.wx;
 if(addr===0xFF4C){
 
 if(gbcMode)
-return 0x00;
+return gbCartridge.rom[0x0143];
 
-return 0x00;
+return 0x04;
 
 }
 /* =========================================================

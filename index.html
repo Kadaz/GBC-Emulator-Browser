@@ -3085,6 +3085,54 @@ return;
 return;
 
 }
+
+/* =========================================================
+   MBC5
+========================================================= */
+
+if(gbIsMBC5()){
+
+if(addr<0x2000){
+
+gbCartridge.ramEnabled=
+(value&0x0F)===0x0A;
+
+return;
+
+}
+
+if(addr<0x3000){
+
+gbCartridge.romBank=
+(gbCartridge.romBank&0x100)|
+(value&0xFF);
+
+return;
+
+}
+
+if(addr<0x4000){
+
+gbCartridge.romBank=
+(gbCartridge.romBank&0xFF)|
+((value&0x01)<<8);
+
+return;
+
+}
+
+if(addr<0x6000){
+
+gbCartridge.ramBank=
+value&0x0F;
+
+return;
+
+}
+
+return;
+
+}
 /* =========================================================
    CGB BANK / PALETTE REGISTERS
 ========================================================= */

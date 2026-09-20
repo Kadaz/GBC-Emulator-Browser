@@ -2327,13 +2327,7 @@ function gbMBC5ROMBank(){
 if(!gbIsMBC5())
 return 1;
 
-let bank=
-gbCartridge.romBank&0x1FF;
-
-if(bank===0)
-bank=1;
-
-return bank;
+return gbCartridge.romBank&0x1FF;
 
 }
 
@@ -2346,7 +2340,6 @@ return 0;
 return gbCartridge.ramBank&0x0F;
 
 }
-
 /* =========================================================
    CGB MEMORY BANK HELPERS
 ========================================================= */

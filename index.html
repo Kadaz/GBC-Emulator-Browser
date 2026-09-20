@@ -2312,6 +2312,40 @@ return 0xFF;
 
 }
 
+function gbIsMBC5(){
+
+return(
+gbCartridge.mbcType>=0x19 &&
+gbCartridge.mbcType<=0x1E
+);
+
+}
+
+
+function gbMBC5ROMBank(){
+
+if(!gbIsMBC5())
+return 1;
+
+let bank=
+gbCartridge.romBank&0x1FF;
+
+if(bank===0)
+bank=1;
+
+return bank;
+
+}
+
+
+function gbMBC5RAMBank(){
+
+if(!gbIsMBC5())
+return 0;
+
+return gbCartridge.ramBank&0x0F;
+
+}
 
 /* =========================================================
    CGB MEMORY BANK HELPERS

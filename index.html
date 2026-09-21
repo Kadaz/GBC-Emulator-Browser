@@ -3335,8 +3335,30 @@ addr<0xC000
 if(!gbCartridge.ramEnabled)
 return;
 
-const bank=
+let bank;
+
+if(gbIsMBC3()){
+
+if(gbCartridge.ramBank>3)
+return;
+
+bank=
+gbMBC3RAMBank();
+
+}
+else
+if(gbIsMBC5()){
+
+bank=
+gbMBC5RAMBank();
+
+}
+else{
+
+bank=
 gbMBC1RAMBank();
+
+}
 
 gbCartridge.ram[
 bank*0x2000+

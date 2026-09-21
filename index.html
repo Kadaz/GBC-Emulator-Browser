@@ -2437,13 +2437,19 @@ bank=
 gbMBC3RAMBank();
 
 }
+else
+if(gbIsMBC5()){
+
+bank=
+gbMBC5RAMBank();
+
+}
 else{
 
 bank=
 gbMBC1RAMBank();
 
 }
-
 return gbCartridge.ram[
 bank*0x2000+
 (addr-0xA000)

@@ -1972,7 +1972,7 @@ new Uint8Array(
 gbTileDirty.fill(1);
 
 
-function gbInvalidateTile(addr){
+function gbInvalidateTile(addr,bank=gbcVRAMBank){
 
 const physical=
 (addr-0x8000)>>4;
@@ -1982,8 +1982,7 @@ physical>=0 &&
 physical<384
 ){
 
-const bank=
-gbcVRAMBank&1;
+bank&=1;
 
 gbTileDirty[
 bank*384+
@@ -2279,16 +2278,6 @@ bank*0x4000+addr;
 
 if(index<gbCartridge.rom.length)
 return gbCartridge.rom[index];
-
-return 0xFF;
-
-}
-
-
-if(addr<0x4000){
-
-if(addr<gbCartridge.rom.length)
-return gbCartridge.rom[addr];
 
 return 0xFF;
 
@@ -3325,12 +3314,14 @@ addr>=0x8000 &&
 addr<=0x9FFF
 ){
 
+const vramBank=gbcVRAMBank&1;
+
 gbVRAM[
 gbcVRAMOffset(addr)
 ]=
 value;
 
-gbInvalidateTile(addr);
+gbInvalidateTile(addr,vramBank);
 
 return;
 
@@ -3796,6 +3787,22 @@ gbcKEY1=0x00;
 
 gbcBGPaletteRAM.fill(0);
 gbcOBJPaletteRAM.fill(0);
+
+/*
+   No CGB boot ROM is executed by this emulator.
+   Start palette RAM with white RGB555 entries so
+   CGB graphics remain visible until the cartridge
+   initializes its own palettes.
+*/
+for(let i=0;i<0x40;i+=2){
+
+gbcBGPaletteRAM[i]=0xFF;
+gbcBGPaletteRAM[i+1]=0x7F;
+
+gbcOBJPaletteRAM[i]=0xFF;
+gbcOBJPaletteRAM[i+1]=0x7F;
+
+}
 
 gbcBGPaletteIndex=0;
 gbcOBJPaletteIndex=0;
@@ -6427,7 +6434,7 @@ bg[pixel]=color;
    0 = normal BG priority
    1 = BG tile has priority over sprites
 */
-gbBGPriority[pixel]=0;
+gbBGPriority[pixel]=
 gbcMode &&
 (attr&0x80) &&
 color!==0
@@ -6441,18 +6448,25 @@ const i=
 pixel*4;
 
 if(gbcMode){
-const shade=
-gbShadeTable[
-bgp*4+color
-];
+
+const palette=
+attr&0x07;
+
+const rgb=
+gbcGetBGColor(
+palette,
+color
+);
+
 image[i]=
-shade;
+rgb.r;
 image[i+1]=
-shade;
+rgb.g;
 image[i+2]=
-shade;
+rgb.b;
 image[i+3]=
 255;
+
 }
 else{
 
@@ -6599,7 +6613,7 @@ bg[pixel]=color;
    The window uses the same attribute format
    as the background tile maps.
 */
-gbBGPriority[pixel]=0;
+gbBGPriority[pixel]=
 gbcMode &&
 (attr&0x80) &&
 color!==0

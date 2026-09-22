@@ -9605,7 +9605,720 @@ document.getElementById(
 
 gbLoadState();
 
-};   
+}; 
+
+/* =========================================================
+   CGB RENDERER REPLACEMENT
+========================================================= */
+
+gbPPUDrawBackground=function(){
+
+const image=gbImage.data;
+
+const bgColorIndex=gbBGColorIndex;
+
+const bgPriority=
+new Uint8Array(160*144);
+
+
+/* ---------------------------------------------------------
+   CGB palette reader
+--------------------------------------------------------- */
+
+function cgbRGB(ram,palette,color){
+
+const index=
+((palette&7)*8)+
+((color&3)*2);
+
+const lo=
+ram[index];
+
+const hi=
+ram[index+1];
+
+const value=
+lo|
+((hi&0x7F)<<8);
+
+const r=
+value&31;
+
+const g=
+(value>>5)&31;
+
+const b=
+(value>>10)&31;
+
+return{
+r:(r*255)/31,
+g:(g*255)/31,
+b:(b*255)/31
+};
+
+}
+
+
+/* ---------------------------------------------------------
+   Registers
+--------------------------------------------------------- */
+
+const lcdc=
+gbPPU.lcdc;
+
+const bgEnable=
+(lcdc&0x01)!==0;
+
+const objEnable=
+(lcdc&0x02)!==0;
+
+const objSize=
+(lcdc&0x04)?16:8;
+
+const bgMap=
+(lcdc&0x08)
+?
+0x1C00
+:
+0x1800;
+
+const tileDataUnsigned=
+(lcdc&0x10)!==0;
+
+const windowEnable=
+(lcdc&0x20)!==0;
+
+const windowMap=
+(lcdc&0x40)
+?
+0x1C00
+:
+0x1800;
+
+
+/* ---------------------------------------------------------
+   Clear frame
+--------------------------------------------------------- */
+
+for(let i=0;i<160*144;i++){
+
+bgColorIndex[i]=0;
+
+bgPriority[i]=0;
+
+const p=i*4;
+
+image[p]=255;
+image[p+1]=255;
+image[p+2]=255;
+image[p+3]=255;
+
+}
+
+
+/* ---------------------------------------------------------
+   Background
+--------------------------------------------------------- */
+
+for(let y=0;y<144;y++){
+
+const scy=
+gbPPU.lineSCY[y];
+
+const scx=
+gbPPU.lineSCX[y];
+
+for(let screenX=0;screenX<160;screenX++){
+
+const pixel=
+y*160+
+screenX;
+
+
+/*
+   LCDC.0 disabled on CGB:
+   BG/window color is color 0.
+*/
+
+if(!bgEnable){
+
+bgColorIndex[pixel]=0;
+
+const p=pixel*4;
+
+if(gbcMode){
+
+const rgb=
+cgbRGB(
+gbcBGPaletteRAM,
+0,
+0
+);
+
+image[p]=rgb.r;
+image[p+1]=rgb.g;
+image[p+2]=rgb.b;
+image[p+3]=255;
+
+}
+else{
+
+image[p]=255;
+image[p+1]=255;
+image[p+2]=255;
+image[p+3]=255;
+
+}
+
+continue;
+
+}
+
+
+const mapX=
+(scX=(scx+screenX)&255);
+
+const mapY=
+(scY=(scy+y)&255);
+
+const tileX=
+mapX>>3;
+
+const tileY=
+mapY>>3;
+
+const mapOffset=
+bgMap+
+tileY*32+
+tileX;
+
+const tileIndex=
+gbVRAM[mapOffset];
+
+let attr=0;
+
+if(gbcMode){
+
+attr=
+gbVRAM[
+0x2000+
+mapOffset
+];
+
+}
+
+
+let tile=
+gbGetTileIndex(
+tileIndex,
+!tileDataUnsigned
+);
+
+
+const bank=
+gbcMode&&
+(attr&0x08)
+?
+1
+:
+0;
+
+
+let row=
+mapY&7;
+
+let col=
+mapX&7;
+
+
+if(gbcMode){
+
+if(attr&0x40)
+row=7-row;
+
+if(attr&0x20)
+col=7-col;
+
+}
+
+
+const color=
+gbGetTilePixel(
+tile,
+row,
+col,
+bank
+);
+
+
+bgColorIndex[pixel]=color;
+
+
+/*
+   CGB BG priority.
+
+   Only non-zero BG colors can
+   actually hide an OBJ.
+*/
+
+if(
+gbcMode &&
+(attr&0x80) &&
+color!==0
+){
+
+bgPriority[pixel]=1;
+
+}
+
+
+/* -------------------------------------------------------
+   Pixel color
+------------------------------------------------------- */
+
+const out=
+pixel*4;
+
+if(gbcMode){
+
+const palette=
+attr&0x07;
+
+const rgb=
+cgbRGB(
+gbcBGPaletteRAM,
+palette,
+color
+);
+
+image[out]=rgb.r;
+image[out+1]=rgb.g;
+image[out+2]=rgb.b;
+image[out+3]=255;
+
+}
+else{
+
+const shade=
+gbShadeTable[
+gbPPU.bgp*4+
+color
+];
+
+image[out]=shade;
+image[out+1]=shade;
+image[out+2]=shade;
+image[out+3]=255;
+
+}
+
+}
+
+}
+
+
+/* ---------------------------------------------------------
+   Window
+--------------------------------------------------------- */
+
+if(windowEnable && (lcdc&0x20)){
+
+const wx=
+gbPPU.wx-7;
+
+const wy=
+gbPPU.wy;
+
+for(let y=0;y<144;y++){
+
+if(y<wy)
+continue;
+
+const windowY=
+y-wy;
+
+const tileY=
+windowY>>3;
+
+if(tileY>=32)
+continue;
+
+for(let screenX=0;screenX<160;screenX++){
+
+const windowX=
+screenX-wx;
+
+if(windowX<0)
+continue;
+
+const tileX=
+windowX>>3;
+
+if(tileX>=32)
+continue;
+
+const mapOffset=
+windowMap+
+tileY*32+
+tileX;
+
+const tileIndex=
+gbVRAM[mapOffset];
+
+let attr=0;
+
+if(gbcMode){
+
+attr=
+gbVRAM[
+0x2000+
+mapOffset
+];
+
+}
+
+let tile=
+gbGetTileIndex(
+tileIndex,
+!tileDataUnsigned
+);
+
+const bank=
+gbcMode&&
+(attr&0x08)
+?
+1
+:
+0;
+
+let row=
+windowY&7;
+
+let col=
+windowX&7;
+
+if(gbcMode){
+
+if(attr&0x40)
+row=7-row;
+
+if(attr&0x20)
+col=7-col;
+
+}
+
+const color=
+gbGetTilePixel(
+tile,
+row,
+col,
+bank
+);
+
+const pixel=
+y*160+
+screenX;
+
+bgColorIndex[pixel]=color;
+
+if(
+gbcMode &&
+(attr&0x80) &&
+color!==0
+){
+
+bgPriority[pixel]=1;
+
+}
+
+const out=
+pixel*4;
+
+if(gbcMode){
+
+const palette=
+attr&7;
+
+const rgb=
+cgbRGB(
+gbcBGPaletteRAM,
+palette,
+color
+);
+
+image[out]=rgb.r;
+image[out+1]=rgb.g;
+image[out+2]=rgb.b;
+image[out+3]=255;
+
+}
+else{
+
+const shade=
+gbShadeTable[
+gbPPU.bgp*4+
+color
+];
+
+image[out]=shade;
+image[out+1]=shade;
+image[out+2]=shade;
+image[out+3]=255;
+
+}
+
+}
+
+}
+
+}
+
+
+/* ---------------------------------------------------------
+   Sprites
+--------------------------------------------------------- */
+
+if(objEnable){
+
+for(let sprite=0;sprite<40;sprite++){
+
+const base=
+sprite*4;
+
+const sy=
+gbOAM[base]-16;
+
+const sx=
+gbOAM[base+1]-8;
+
+let tile=
+gbOAM[base+2];
+
+const attr=
+gbOAM[base+3];
+
+if(sx<=-8 || sx>=160)
+continue;
+
+if(sy<=-objSize || sy>=144)
+continue;
+
+
+/* 8x16 sprites use even tile numbers */
+
+if(objSize===16)
+tile&=0xFE;
+
+
+const flipY=
+(attr&0x40)!==0;
+
+const flipX=
+(attr&0x20)!==0;
+
+const behindBG=
+(attr&0x80)!==0;
+
+const bank=
+gbcMode&&
+(attr&0x08)
+?
+1
+:
+0;
+
+const palette=
+attr&0x07;
+
+const dmgPalette=
+(attr&0x10)
+?
+gbPPU.obp1
+:
+gbPPU.obp0;
+
+
+for(let py=0;py<objSize;py++){
+
+const screenY=
+sy+py;
+
+if(screenY<0 || screenY>=144)
+continue;
+
+let row=
+py;
+
+if(flipY)
+row=objSize-1-row;
+
+let tileNumber=
+tile;
+
+let tileRow=
+row;
+
+if(objSize===16){
+
+if(tileRow>=8){
+
+tileNumber=
+tile+1;
+
+tileRow-=8;
+
+}
+else{
+
+tileNumber=
+tile;
+
+}
+
+}
+
+for(let px=0;px<8;px++){
+
+const screenX=
+sx+px;
+
+if(screenX<0 || screenX>=160)
+continue;
+
+let col=
+px;
+
+if(flipX)
+col=7-col;
+
+const color=
+gbGetTilePixel(
+tileNumber,
+tileRow,
+col,
+bank
+);
+
+if(color===0)
+continue;
+
+const pixel=
+screenY*160+
+screenX;
+
+
+/* -----------------------------------------------------
+   CGB BG/OBJ priority
+
+   OBJ wins when:
+   - BG color is 0
+   - LCDC.0 is clear
+   - neither relevant priority flag blocks it
+----------------------------------------------------- */
+
+let blocked=false;
+
+if(gbcMode){
+
+const bgMaster=
+(lcdc&0x01)!==0;
+
+if(bgMaster){
+
+if(
+bgPriority[pixel] ||
+(
+behindBG &&
+bgColorIndex[pixel]!==0
+)
+){
+
+blocked=true;
+
+}
+
+}
+
+}
+else{
+
+if(
+behindBG &&
+bgColorIndex[pixel]!==0
+){
+
+blocked=true;
+
+}
+
+}
+
+if(blocked)
+continue;
+
+
+/* -----------------------------------------------------
+   Draw sprite
+----------------------------------------------------- */
+
+const out=
+pixel*4;
+
+if(gbcMode){
+
+const rgb=
+cgbRGB(
+gbcOBJPaletteRAM,
+palette,
+color
+);
+
+image[out]=rgb.r;
+image[out+1]=rgb.g;
+image[out+2]=rgb.b;
+image[out+3]=255;
+
+}
+else{
+
+const shade=
+gbShadeTable[
+dmgPalette*4+
+color
+];
+
+image[out]=shade;
+image[out+1]=shade;
+image[out+2]=shade;
+image[out+3]=255;
+
+}
+
+}
+
+}
+
+}
+
+}
+
+
+/* ---------------------------------------------------------
+   Final image
+--------------------------------------------------------- */
+
+gbCtx.putImageData(
+gbImage,
+0,
+0
+);
+
+};
+
+
+/* =========================================================
+   END CGB RENDERER REPLACEMENT
+========================================================= */
 /* =========================================================
    GAME LOOP
 ========================================================= */

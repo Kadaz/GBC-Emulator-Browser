@@ -304,7 +304,7 @@ for(let p=0;p<256;p++){
 
 for(let col=0;col<4;col++){
 
-gbShadeTable[
+
 p*4+col
 ]=
 gbPalette[
@@ -6441,18 +6441,28 @@ const i=
 pixel*4;
 
 if(gbcMode){
-const shade=
-gbShadeTable[
-bgp*4+color
-];
+
+const palette=
+attr&0x07;
+
+const rgb=
+gbcGetBGColor(
+palette,
+color
+);
+
 image[i]=
-shade;
+rgb.r;
+
 image[i+1]=
-shade;
+rgb.g;
+
 image[i+2]=
-shade;
+rgb.b;
+
 image[i+3]=
 255;
+
 }
 else{
 

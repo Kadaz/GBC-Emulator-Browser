@@ -2285,6 +2285,16 @@ return 0xFF;
 }
 
 
+if(addr<0x4000){
+
+if(addr<gbCartridge.rom.length)
+return gbCartridge.rom[addr];
+
+return 0xFF;
+
+}
+
+
 if(addr<0x8000){
 
 let bank;

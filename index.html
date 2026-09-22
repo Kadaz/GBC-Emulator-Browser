@@ -2485,12 +2485,14 @@ addr>=0xE000 &&
 addr<0xFE00
 ){
 
-return gbMemory[
-addr-0x2000
+const mirror=
+addr-0x2000;
+
+return gbWRAM[
+gbcWRAMOffset(mirror)
 ];
 
 }
-
 
 if(
 addr>=0xFE00 &&

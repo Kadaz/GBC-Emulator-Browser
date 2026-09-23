@@ -1903,6 +1903,7 @@ let gbcMode=false;
 */
 
 let gbcKEY1=0x00;
+let gbcDoubleSpeed=false;
 
 
 /*
@@ -2621,7 +2622,11 @@ return 0x04;
 
 if(addr===0xFF4D){
 
-return gbcKEY1|0x7E;
+return(
+(gbcDoubleSpeed ? 0x80 : 0x00) |
+(gbcKEY1&0x01) |
+0x7E
+);
 
 }
 
@@ -3151,9 +3156,16 @@ return;
 
 if(addr===0xFF4D){
 
+/*
+   KEY1:
+   bit 0 = prepare speed switch
+   bit 7 = current CPU speed
+
+   The actual speed change happens on STOP.
+*/
+
 gbcKEY1=
-(gbcKEY1&0x80)|
-(value&0x01);
+value&0x01;
 
 return;
 
@@ -3960,6 +3972,11 @@ this.pc=0x0100;
 this.halted=false;
 this.stopped=false;
 
+if(gbcMode){
+    gbcDoubleSpeed=false;
+    gbcKEY1=0x00;
+}
+
 this.ime=false;
 this.imeDelay=0;
 
@@ -4588,12 +4605,45 @@ switch(op){
 case 0x00:
 return 4;
 
-case 0x10:
+case 0x10:{
+
+/*
+   STOP is also the CGB speed-switch instruction.
+
+   If KEY1 bit 0 is prepared, CGB hardware switches
+   between normal and double CPU speed instead of
+   entering the permanent stopped state.
+*/
 
 this.fetch8();
+
+if(
+gbcMode &&
+(gbcKEY1&0x01)
+){
+
+gbcDoubleSpeed=
+!gbcDoubleSpeed;
+
+gbcKEY1=
+gbcDoubleSpeed
+?
+0x80
+:
+0x00;
+
+this.stopped=false;
+
+}
+else{
+
 this.stopped=true;
 
+}
+
 return 4;
+
+}
 
 
 /* 16 bit */
@@ -7070,10 +7120,25 @@ used
 :
 4;
 
-gbTimerStep(actual);
-gbPPUStep(actual);
+/*
+   CPU/timer use CPU clock cycles.
+   The CGB PPU remains at the normal clock speed,
+   so in double-speed mode it receives half as many
+   cycles for the same CPU instruction time.
+*/
 
-cycles+=actual;
+gbTimerStep(actual);
+
+const ppuCycles=
+gbcDoubleSpeed
+?
+(actual>>1)
+:
+actual;
+
+gbPPUStep(ppuCycles);
+
+cycles+=ppuCycles;
 
 }
 
